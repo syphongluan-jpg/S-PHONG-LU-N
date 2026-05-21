@@ -1,6 +1,6 @@
 {
   "name": "Trò chơi Học tập Tổng hợp",
-  "description": "Ứng dụng trò chơi học tập các chủ đề Ca dao Tục ngữ, Toán học, Lịch sử Việt Nam và Khoa học Tự nhiên dành cho học sinh THCS kèm chế độ PVP và luyện tập.",
+  "description": "Đấu Trường Học Tập Tương Lai Cyber - Trải nghiệm vũ trụ tri thức với hệ thống 10,000 câu hỏi 1-5★, cày cấp, đấu sảnh PvP, bốc thăm may mắn và mạng thần kinh nhân tạo Gemini tối tân.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

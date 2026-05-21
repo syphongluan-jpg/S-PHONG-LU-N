@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Question, UserProfile } from '../types';
-import { Loader2, Award, Clock, ArrowRight, ShieldAlert, Sparkles, Trophy, Zap, AlertCircle } from 'lucide-react';
+import { Loader2, ShieldAlert, Clock, ArrowRight, BookOpen, Trophy, Zap, AlertTriangle, CheckCircle } from 'lucide-react';
 import { fetchPvPQuestions } from '../utils/questionService';
 
 interface PvPGameProps {
@@ -48,9 +48,27 @@ export function PvPGame({ userProfile, onGameComplete, onExit }: PvPGameProps) {
   const [timerSeconds, setTimerSeconds] = useState(0);
   const startTime = useRef<number>(Date.now());
 
+  // Synthesizer beep
+  const playPvPBeep = (freq: number, duration: number = 0.1, type: 'sine' | 'triangle' | 'sawtooth' | 'square' = 'sine') => {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      gain.gain.setValueAtTime(0.04, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + duration);
+    } catch (e) {
+      // Audio autoplay bypass
+    }
+  };
+
   // Setup opponent and fetch 50 PVP questions
   useEffect(() => {
-    // Choose random opponent
     const chosenOpponent = OPONENTS[Math.floor(Math.random() * OPONENTS.length)];
     setOpponent(chosenOpponent);
 
@@ -91,7 +109,7 @@ export function PvPGame({ userProfile, onGameComplete, onExit }: PvPGameProps) {
 
   // Bot play simulator
   useEffect(() => {
-    if (loading || questions.length === 0 || isAnswered === false && currentIndex === 50) return;
+    if (loading || questions.length === 0 || (isAnswered === false && currentIndex === 50)) return;
 
     // Simulated action ticker
     const interval = setInterval(() => {
@@ -101,7 +119,6 @@ export function PvPGame({ userProfile, onGameComplete, onExit }: PvPGameProps) {
       }
 
       // Propose bot advances
-      const botQ = questions[opponentCurrentIndex];
       let pts = 5;
       if (opponentCurrentIndex >= 40) pts = 27.5;
       else if (opponentCurrentIndex >= 25) pts = 15;
@@ -117,6 +134,7 @@ export function PvPGame({ userProfile, onGameComplete, onExit }: PvPGameProps) {
       if (isBotCorrect) {
         setOpponentScore(prev => prev + pts);
         setOpponentCorrectCount(prev => prev + 1);
+        playPvPBeep(320, 0.08, 'sine'); // soft beep for opponent correct answer
       }
 
       // Advance opponent index
@@ -129,25 +147,25 @@ export function PvPGame({ userProfile, onGameComplete, onExit }: PvPGameProps) {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-center space-y-4">
-        <Loader2 className="w-14 h-14 text-amber-500 animate-spin" />
-        <h3 className="text-xl font-serif italic font-black text-slate-100">Đang chuẩn hóa Đấu trường Đỉnh cao...</h3>
-        <p className="text-xs text-slate-400 max-w-sm">Vui lòng chờ. Gemini AI đang thiết kế 50 ván bài đại thăng hoa tăng dần độ khó vô tận!</p>
+      <div className="flex flex-col items-center justify-center py-24 text-center space-y-4 font-mono">
+        <Loader2 className="w-14 h-14 text-purple-400 animate-spin" />
+        <h3 className="text-xl font-black text-slate-100 uppercase tracking-tight">KẾT NỐI KHÔNG GIAN PvP ĐA CHIỀU</h3>
+        <p className="text-xs text-purple-400 max-w-sm font-bold uppercase tracking-widest animate-pulse">ĐANG PHÂN BỔ 50 ĐỀ THI TRÍ TUỆ TÙNG PHÂN VÙNG DỮ LIỆU...</p>
       </div>
     );
   }
 
   if (error || questions.length === 0) {
     return (
-      <div className="p-8 text-center space-y-4 max-w-md mx-auto bg-slate-900 border border-slate-800 rounded-3xl shadow-xl">
+      <div className="p-8 text-center space-y-4 max-w-md mx-auto bg-slate-950 border-2 border-red-500/30 rounded-3xl shadow-xl font-mono">
         <ShieldAlert className="w-16 h-16 text-rose-500 mx-auto" />
-        <h3 className="text-xl font-serif italic font-extrabold text-slate-100">Lỗi Đấu trường</h3>
-        <p className="text-xs text-slate-400">{error || 'Thất bại khi tổ chức Đấu trường PvP.'}</p>
+        <h3 className="text-xl font-black text-slate-100 uppercase tracking-tight">LỖI THIẾT LẬP KẾT KHOA</h3>
+        <p className="text-xs text-slate-405 text-slate-400">{error || 'Thất bại khi tổ chức Đấu trường PvP.'}</p>
         <button
           onClick={onExit}
-          className="bg-slate-950 border border-slate-800 hover:bg-slate-900 text-amber-450 text-amber-400 py-2.5 px-5 rounded-xl text-xs font-bold cursor-pointer transition duration-150"
+          className="bg-slate-900 border border-slate-800 hover:bg-slate-805 text-cyan-405 text-cyan-400 py-2.5 px-5 rounded-xl text-xs font-black tracking-widest uppercase cursor-pointer transition duration-150"
         >
-          Trở về an toàn
+          TRỞ VỀ THIẾT CHẾ AN TOÀN
         </button>
       </div>
     );
@@ -181,6 +199,9 @@ export function PvPGame({ userProfile, onGameComplete, onExit }: PvPGameProps) {
     if (isCorrect) {
       setPlayerScore(prev => prev + pts);
       setPlayerCorrectCount(prev => prev + 1);
+      playPvPBeep(980, 0.25, 'triangle');
+    } else {
+      playPvPBeep(180, 0.45, 'sawtooth');
     }
 
     setIsAnswered(true);
@@ -189,12 +210,12 @@ export function PvPGame({ userProfile, onGameComplete, onExit }: PvPGameProps) {
   const currentPtsVal = getQuestionPoints(currentIndex);
 
   const handleNext = () => {
+    playPvPBeep(580, 0.08, 'sine');
     if (currentIndex === questions.length - 1 || currentIndex >= 49) {
-      // Completed PvP Arena!
+      // Completed All questions 
       const totalTime = Math.floor((Date.now() - startTime.current) / 1000);
       const won = playerScore >= opponentScore;
       
-      // Compute Titles ONLY if scored perfect 700 points
       let titleEarned = won ? 'Nhà Vô Địch' : 'Người Thua Trận';
       
       if (playerScore >= 700) {
@@ -206,7 +227,7 @@ export function PvPGame({ userProfile, onGameComplete, onExit }: PvPGameProps) {
         else titleEarned = 'Trạng Nguyên PvP';
       }
 
-      // XP: +25 XP per correct answer, with a giant 200 XP bonus if won the arena
+      // XP calculation
       const gainedXP = (playerCorrectCount * 25) + (won ? 200 : 0);
       const shownMeme = won ? undefined : MEMES[Math.floor(Math.random() * MEMES.length)];
 
@@ -222,50 +243,51 @@ export function PvPGame({ userProfile, onGameComplete, onExit }: PvPGameProps) {
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       {/* Title & Timing Info */}
-      <div className="bg-gradient-to-r from-purple-950/40 via-slate-900/50 to-indigo-950/40 text-slate-100 rounded-3xl p-5 shadow-xl border border-purple-900/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-gradient-to-r from-purple-950/50 via-slate-950 to-indigo-950/50 text-slate-100 rounded-3xl p-6 shadow-[0_0_25px_rgba(168,85,247,0.15)] border-2 border-purple-500/30 flex flex-col md:flex-row md:items-center justify-between gap-4 relative overflow-hidden cyber-scanlines">
+        <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-purple-400 to-transparent pointer-events-none" />
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <Trophy className="w-5 h-5 text-yellow-405 text-yellow-400 fill-yellow-400 animate-spin" />
-            <h3 className="font-serif italic font-extrabold text-base uppercase tracking-wider">Đấu trường Khoa học - Trí Tuệ PvP</h3>
+            <Trophy className="w-5 h-5 text-yellow-450 text-yellow-400 fill-yellow-400 animate-bounce" />
+            <h3 className="font-mono font-black text-sm uppercase tracking-wider">ĐẤU TRƯỜNG HUYỀN THoẠI PvP - TRÍ TUỆ ĐỈNH CAO</h3>
           </div>
-          <p className="text-xs text-purple-300">Kiến thức tăng cao không giới hạn. Thang điểm đỉnh cao: <strong className="text-amber-400">700 điểm</strong></p>
+          <p className="text-xs text-purple-308 text-purple-300 font-semibold">Tăng cấp giới hạn. Thang điểm đỉnh cao: <strong className="text-amber-400">700 điểm</strong></p>
         </div>
 
-        <div className="flex items-center gap-4 text-sm font-bold bg-slate-950 border border-purple-900/40 text-purple-300 px-4 py-2 rounded-xl shrink-0">
-          <Clock className="w-4 h-4 text-amber-500" />
-          <span className="font-mono">
-            Thời gian: {Math.floor(timerSeconds / 60)}:{(timerSeconds % 60).toString().padStart(2, '0')}
+        <div className="flex items-center gap-4 text-xs font-black bg-slate-900 border border-purple-900/40 text-purple-300 px-4 py-2.5 rounded-xl shrink-0 font-mono tracking-widest">
+          <Clock className="w-4 h-4 text-amber-500 animate-spin" />
+          <span>
+            TIME_METRIC: {Math.floor(timerSeconds / 60)}:{(timerSeconds % 60).toString().padStart(2, '0')}
           </span>
         </div>
       </div>
 
       {/* Side by side Leaderboard Progress */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 font-mono">
         {/* Player section */}
-        <div className="bg-slate-900/40 border border-slate-800/80 p-5 rounded-2xl shadow-xl space-y-3">
+        <div className="bg-slate-950 border-2 border-cyan-500/20 p-5 rounded-2xl shadow-xl space-y-3 relative overflow-hidden">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <span className="text-xl">🎒</span>
+              <span className="text-xl filter drop-shadow-[0_2px_8px_rgba(34,211,238,0.4)]">🎒</span>
               <div>
-                <h4 className="font-serif italic font-bold text-slate-200 text-xs">{userProfile.username} (Lớp {userProfile.studentClass})</h4>
-                <p className="text-[10px] text-slate-500">Bạn đang thi đấu</p>
+                <h4 className="font-black text-slate-150 text-xs uppercase tracking-tight">{userProfile.username} (LỚP {userProfile.studentClass})</h4>
+                <p className="text-[9px] text-cyan-400/70 font-bold uppercase tracking-widest">ĐÁNH CHỐNG CHỦ QUYỀN</p>
               </div>
             </div>
 
             <div className="text-right">
-              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Điểm số</p>
-              <p className="font-mono font-black text-amber-400 text-base">{playerScore} / 700</p>
+              <p className="text-[9px] text-slate-450 text-slate-400 uppercase tracking-widest font-black">Xung Điểm</p>
+              <p className="font-mono font-black text-cyan-400 text-sm sm:text-base">{playerScore} / 700</p>
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <div className="flex justify-between text-[10px] text-slate-400 font-semibold font-mono">
-              <span>Đúng: {playerCorrectCount} / 50</span>
-              <span>Cầu đứng: {currentIndex + 1}</span>
+            <div className="flex justify-between text-[10px] text-slate-400 font-bold">
+              <span>ĐÚNG: {playerCorrectCount} / 50</span>
+              <span>CÂU: {currentIndex + 1}</span>
             </div>
-            <div className="w-full bg-slate-950 border border-slate-800/60 h-2 rounded-full overflow-hidden">
+            <div className="w-full bg-slate-900 border border-slate-800 h-2 rounded-full overflow-hidden">
               <div 
-                className="bg-gradient-to-r from-amber-400 to-amber-500 h-full transition-all duration-300 shadow-[0_0_8px_rgba(245,158,11,0.25)]"
+                className="bg-gradient-to-r from-cyan-500 to-indigo-505 to-indigo-500 h-full transition-all duration-350 shadow-[0_0_8px_rgba(6,182,212,0.4)]"
                 style={{ width: `${((currentIndex + 1) / 50) * 100}%` }}
               />
             </div>
@@ -273,31 +295,31 @@ export function PvPGame({ userProfile, onGameComplete, onExit }: PvPGameProps) {
         </div>
 
         {/* Bot Opponent section */}
-        <div className="bg-slate-900/40 border border-purple-900/20 p-5 rounded-2xl shadow-xl space-y-3">
+        <div className="bg-slate-950 border-2 border-purple-500/20 p-5 rounded-2xl shadow-xl space-y-3 relative overflow-hidden">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <span className="text-xl">🤖</span>
+              <span className="text-xl filter drop-shadow-[0_2px_8px_rgba(168,85,247,0.4)]">🤖</span>
               <div>
-                <h4 className="font-serif italic font-bold text-purple-300 text-xs">{opponent.name} ({opponent.class})</h4>
-                <p className="text-[10px] text-slate-500">Đối thủ giả lập AI</p>
+                <h4 className="font-black text-purple-300 text-xs uppercase tracking-tight">{opponent.name}</h4>
+                <p className="text-[9px] text-purple-400/80 font-bold uppercase tracking-widest">ĐỐI THỦ GIẢ LẬP AI</p>
               </div>
             </div>
 
             <div className="text-right">
-              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Điểm của Địch</p>
-              <p className="font-mono font-black text-purple-400 text-base">{opponentScore} / 700</p>
+              <p className="text-[9px] text-slate-450 text-slate-450 text-slate-400 uppercase tracking-widest font-black">Xung Điểm Địch</p>
+              <p className="font-mono font-black text-purple-400 text-sm sm:text-base">{opponentScore} / 700</p>
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <div className="flex justify-between text-[10px] text-slate-400 font-semibold font-mono">
-              <span>Học bá giải đúng: {opponentCorrectCount} / 50</span>
-              <span>Cầu địch: {Math.min(opponentCurrentIndex + 1, 50)}</span>
+            <div className="flex justify-between text-[10px] text-slate-400 font-bold">
+              <span>ĐÚNG: {opponentCorrectCount} / 50</span>
+              <span>CÂU ĐỊCH: {Math.min(opponentCurrentIndex + 1, 50)}</span>
             </div>
-            <div className="w-full bg-slate-950 border border-slate-805 h-2 rounded-full overflow-hidden">
+            <div className="w-full bg-slate-900 border border-slate-800 h-2 rounded-full overflow-hidden">
               <div 
-                className="bg-purple-600 h-full transition-all duration-300 shadow-[0_0_8px_rgba(168,85,247,0.25)]"
-                style={{ width: `${(opponentCurrentIndex / 55) * 100}%` }}
+                className="bg-purple-600 h-full transition-all duration-350 shadow-[0_0_8px_rgba(168,85,247,0.4)]"
+                style={{ width: `${(opponentCurrentIndex / 50) * 100}%` }}
               />
             </div>
           </div>
@@ -305,48 +327,50 @@ export function PvPGame({ userProfile, onGameComplete, onExit }: PvPGameProps) {
       </div>
 
       {/* Main active question panels */}
-      <div className="bg-slate-900/40 border border-slate-800/80 p-5 sm:p-7 shadow-xl space-y-5">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-850">
+      <div className="bg-slate-950 border-2 border-cyan-500/30 rounded-3xl p-6 sm:p-8 shadow-[0_0_30px_rgba(6,182,212,0.15)] space-y-6 relative overflow-hidden cyber-scanlines">
+        <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-400 to-transparent pointer-events-none animate-pulse" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-cyan-500/10 gap-2 font-mono">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] bg-slate-950 border border-slate-800 text-slate-400 font-bold px-2.5 py-0.5 rounded font-mono">
-              Câu {currentIndex + 1} của 50
+            <span className="text-[9px] bg-slate-900 border border-slate-800 text-slate-300 font-black px-2.5 py-1 rounded">
+              CÂU {currentIndex + 1} / 50
             </span>
-            <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wide ${
+            <span className={`text-[9px] font-black px-2.5 py-1 rounded uppercase tracking-wider ${
               currentIndex >= 40 
-                ? 'bg-rose-950/20 text-rose-400 border border-rose-800/50 font-serif italic' 
+                ? 'bg-rose-950/30 text-rose-400 border border-rose-500/30 animate-pulse' 
                 : currentIndex >= 25 
-                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
+                : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
             }`}>
-              Hạng: {currentIndex >= 40 ? 'THÁCH THỨC VŨ TRỤ' : currentIndex >= 25 ? 'KHÓ' : currentIndex >= 10 ? 'TRUNG BÌNH' : 'DỄ'}
+              {currentIndex >= 40 ? 'THÁCH THỨC VŨ TRỤ' : currentIndex >= 25 ? 'KHÓ' : currentIndex >= 10 ? 'TRUNG BÌNH' : 'DỄ'}
             </span>
           </div>
 
-          <div className="text-xs font-black text-amber-450 text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded border border-amber-500/20 font-mono">
-            Giá trị: +{currentPtsVal} điểm
+          <div className="text-xs font-black text-amber-400 bg-amber-550/10 px-3 py-1.5 rounded border border-amber-500/25 tracking-widest">
+            GIÁ TRỊ: +{currentPtsVal} PTS
           </div>
         </div>
 
         {/* Question content */}
-        <div className="p-4 p-5 rounded-2xl border border-slate-800 bg-slate-950/60 min-h-[90px] flex items-center justify-center text-center">
-          <p className="text-sm font-serif italic font-semibold text-slate-200 leading-relaxed md:text-base">
+        <div className="p-6 rounded-2xl border border-cyan-500/15 bg-slate-900/60 min-h-[100px] flex items-center justify-center text-center relative">
+          <div className="absolute top-2 left-2 text-[9px] font-mono text-cyan-600/30 font-black">NEURAL_DECRYPTION_SYNAPSE</div>
+          <p className="text-sm font-semibold text-slate-100 leading-relaxed md:text-base px-2">
             {currentQuestion.questionText}
           </p>
         </div>
 
         {/* Answers entry */}
         {currentQuestion.type === 'multiple-choice' ? (
-          <div className="grid gap-2.5 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             {currentQuestion.options?.map((opt, i) => {
               const letter = ['A', 'B', 'C', 'D'][i];
               const isSelected = selectedAnswer === letter;
               const isCorrectAnswer = letter === currentQuestion.correctAnswer;
 
-              let btnStyle = 'border-slate-800 bg-slate-950 text-slate-350 hover:bg-slate-900/60';
+              let btnStyle = 'border-slate-850 bg-slate-900/25 text-slate-350 hover:border-cyan-500/40 hover:bg-slate-900/50';
               if (isAnswered) {
-                if (isCorrectAnswer) btnStyle = 'bg-emerald-950/30 border-emerald-500 text-emerald-400 ring-1 ring-emerald-500/40 shadow-[0_0_8px_rgba(16,185,129,0.15)]';
-                else if (isSelected) btnStyle = 'bg-rose-950/30 border-rose-500 text-rose-400 ring-1 ring-rose-500/40';
-                else btnStyle = 'opacity-40 pointer-events-none text-slate-500 border-slate-850';
+                if (isCorrectAnswer) btnStyle = 'bg-emerald-950/30 border-emerald-500 text-emerald-350 shadow-[0_0_15px_rgba(16,185,129,0.15)] font-black';
+                else if (isSelected) btnStyle = 'bg-rose-950/30 border-rose-500 text-rose-350 shadow-[0_0_15px_rgba(244,63,94,0.15)] font-black';
+                else btnStyle = 'opacity-40 pointer-events-none text-slate-600 border-transparent';
               }
 
               return (
@@ -355,18 +379,26 @@ export function PvPGame({ userProfile, onGameComplete, onExit }: PvPGameProps) {
                   type="button"
                   disabled={isAnswered}
                   onClick={() => handlePlayerSubmit(letter)}
-                  className={`p-3.5 rounded-xl border text-xs font-bold text-left flex items-start gap-3 transition cursor-pointer ${btnStyle}`}
+                  className={`p-4 rounded-xl border-2 text-xs sm:text-sm font-semibold text-left flex items-start gap-3.5 transition cursor-pointer ${btnStyle} justify-between items-center`}
                 >
-                  <span className="w-6 h-6 shrink-0 bg-slate-900 text-slate-400 rounded-full font-bold text-xs flex items-center justify-center border border-slate-800">
-                    {letter}
-                  </span>
-                  <span className="flex-1 mt-0.5">{opt}</span>
+                  <div className="flex items-start gap-3">
+                    <span className={`w-7 h-7 shrink-0 rounded-lg font-mono font-bold text-xs flex items-center justify-center ${
+                      isAnswered && isCorrectAnswer 
+                        ? 'bg-emerald-500 text-slate-900 font-extrabold' 
+                        : isAnswered && isSelected 
+                        ? 'bg-rose-500 text-slate-900 font-extrabold' 
+                        : 'bg-slate-950 text-slate-400 border border-slate-800'
+                    }`}>
+                      {letter}
+                    </span>
+                    <span className="flex-1 mt-0.5 leading-normal">{opt}</span>
+                  </div>
                 </button>
               );
             })}
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-3 font-mono">
             {!isAnswered ? (
               <div className="flex gap-2">
                 <input
@@ -374,21 +406,21 @@ export function PvPGame({ userProfile, onGameComplete, onExit }: PvPGameProps) {
                   value={shortInput}
                   onChange={(e) => setShortInput(e.target.value)}
                   placeholder="Điền từ khóa đáp án ngắn gọn..."
-                  className="flex-1 bg-slate-950 border-2 border-slate-800 rounded-xl py-2 px-4 focus:outline-none focus:border-amber-500 text-sm font-semibold text-slate-200 placeholder:text-slate-650"
+                  className="flex-1 bg-slate-950 border-2 border-slate-850 rounded-xl py-3 px-4 focus:outline-none focus:border-cyan-400 text-sm font-semibold text-slate-200 placeholder:text-slate-650"
                   onKeyDown={(e) => e.key === 'Enter' && handlePlayerSubmit(shortInput)}
                 />
                 <button
                   type="button"
                   onClick={() => handlePlayerSubmit(shortInput)}
-                  className="bg-gradient-to-r from-purple-600 to-indigo-650 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold py-2.5 px-6 rounded-xl text-xs uppercase tracking-wider shadow-md transition duration-200 cursor-pointer"
+                  className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black py-3 px-6 rounded-xl text-xs uppercase tracking-widest shadow-md transition duration-200 cursor-pointer"
                 >
-                  Giải đề
+                  GIẢI ĐỀ
                 </button>
               </div>
             ) : (
-              <div className="space-y-2 text-xs font-bold font-sans">
-                <p className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-400">Của bạn: "{shortInput || '[Bỏ trống]'}"</p>
-                <p className="p-3 bg-emerald-950/20 border border-emerald-800 text-emerald-400 rounded-xl">🔑 Đáp án đúng chuẩn: "{currentQuestion.correctAnswer}"</p>
+              <div className="space-y-3 text-xs font-bold font-mono">
+                <div className="p-4 bg-slate-900 border border-slate-800 rounded-xl text-slate-350">CỦA BẠN: "{shortInput || '[BỎ TRỐNG]'}"</div>
+                <div className="p-4 bg-emerald-950/20 border border-emerald-500/30 text-emerald-400 rounded-xl">🔑 ĐÁP ÁN ĐÚNG CHUẨN: "{currentQuestion.correctAnswer}"</div>
               </div>
             )}
           </div>
@@ -396,33 +428,35 @@ export function PvPGame({ userProfile, onGameComplete, onExit }: PvPGameProps) {
 
         {/* Explain notes */}
         {isAnswered && (
-          <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
-            <p className="text-[10px] font-bold text-amber-400 uppercase tracking-widest flex items-center gap-1 font-serif italic">
-              <Sparkles className="w-3.5 h-3.5" />
-              Tập sử & Lược giải đấu trường
+          <div className="p-5 bg-cyan-950/15 border border-cyan-500/25 rounded-2xl space-y-2 animate-fade-in text-xs font-semibold">
+            <p className="text-[10px] font-mono font-black text-cyan-400 uppercase tracking-widest flex items-center gap-1.5">
+              <BookOpen className="w-4 h-4 text-cyan-400" />
+              TẬP SỬ & LƯỢC GIẢI ĐẤU TRƯỜNG (DECODED)
             </p>
-            <p className="text-xs text-slate-350 leading-relaxed font-sans font-normal">
+            <p className="text-slate-300 leading-relaxed">
               {currentQuestion.explanation}
             </p>
           </div>
         )}
 
         {/* Navigation Footer */}
-        <div className="flex items-center justify-between border-t border-slate-800 pt-4">
+        <div className="flex items-center justify-between border-t border-cyan-500/10 pt-5 font-mono">
           <button
+            type="button"
             onClick={onExit}
-            className="text-slate-500 hover:text-rose-400 text-xs font-bold cursor-pointer transition hover:underline"
+            className="text-slate-500 hover:text-rose-400 text-xs font-black uppercase tracking-wider cursor-pointer transition"
           >
-            Đầu hàng thua trận
+            ĐẦU HÀNG THUẬT TOÁN
           </button>
 
           {isAnswered && (
             <button
+              type="button"
               onClick={handleNext}
-              className="bg-gradient-to-r from-purple-600 to-indigo-650 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold py-2.5 px-6 rounded-xl text-xs shadow-[0_0_12px_rgba(168,85,247,0.2)] transition duration-200 cursor-pointer flex items-center gap-1.5 uppercase tracking-wider"
+              className="bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-755 hover:from-purple-500 hover:to-indigo-500 text-white font-mono font-black py-3 px-6 rounded-xl text-xs shadow-[0_0_15px_rgba(168,85,247,0.35)] transition duration-200 cursor-pointer flex items-center gap-1.5 uppercase tracking-widest"
             >
-              {currentIndex === 49 ? 'Hoàn thành Đấu trường' : 'Câu tiếp đấu'}
-              <ArrowRight className="w-4 h-4" />
+              {currentIndex === 49 ? 'HOÀN THÀNH ĐẨU SỰ' : 'KẾ TIẾP (NEXT_SEQ) ⚔️'}
+              <ArrowRight className="w-4 h-4 shrink-0" />
             </button>
           )}
         </div>

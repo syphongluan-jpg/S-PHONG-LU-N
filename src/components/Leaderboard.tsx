@@ -19,6 +19,7 @@ export function Leaderboard({ userProfile, competitors }: LeaderboardProps) {
       xp: userProfile.xp,
       title: userProfile.title || 'Học Sinh',
       isBot: false,
+      avatar: userProfile.avatar,
     },
     ...competitors,
   ].sort((a, b) => b.xp - a.xp);
@@ -53,7 +54,7 @@ export function Leaderboard({ userProfile, competitors }: LeaderboardProps) {
               >
                 <div className="flex items-center gap-3">
                   {/* Rank Numbers */}
-                  <div className="w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm">
+                  <div className="w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm shrink-0">
                     {rank === 1 ? (
                       <span className="text-2xl filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">🥇</span>
                     ) : rank === 2 ? (
@@ -62,6 +63,15 @@ export function Leaderboard({ userProfile, competitors }: LeaderboardProps) {
                       <span className="text-2xl filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">🥉</span>
                     ) : (
                       <span className="text-slate-500 font-mono">#{rank}</span>
+                    )}
+                  </div>
+
+                  {/* Avatar Container */}
+                  <div className="w-10 h-10 rounded-xl bg-slate-950 flex items-center justify-center border border-slate-800 text-lg shrink-0 overflow-hidden font-bold select-none shadow-inner">
+                    {item.avatar && item.avatar.startsWith('data:') ? (
+                      <img src={item.avatar} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <span>{item.avatar || '👨‍🎓'}</span>
                     )}
                   </div>
 
