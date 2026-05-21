@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Question, UserProfile } from '../types';
 import { Loader2, Award, Clock, ArrowRight, ShieldAlert, Sparkles, Trophy, Zap, AlertCircle } from 'lucide-react';
+import { fetchPvPQuestions } from '../utils/questionService';
 
 interface PvPGameProps {
   userProfile: UserProfile;
@@ -57,25 +58,19 @@ export function PvPGame({ userProfile, onGameComplete, onExit }: PvPGameProps) {
     async function fetchPvP() {
       try {
         setLoading(true);
-        const res = await fetch('/api/generate-pvp-questions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ studentClass: userProfile.studentClass })
-        });
-        if (!res.ok) throw new Error('Không thể tạo bộ đề Thách đấu PvP');
-        const data = await res.json();
+        const qs = await fetchPvPQuestions(userProfile.studentClass);
         if (active) {
-          if (data.questions && data.questions.length > 0) {
-            setQuestions(data.questions);
+          if (qs && qs.length > 0) {
+            setQuestions(qs);
+            setLoading(false);
+            startTime.current = Date.now();
           } else {
-            throw new Error('Lỗi lấy câu hỏi từ API');
+            throw new Error('Không thể tải bộ đề Thách đấu PvP');
           }
-          setLoading(false);
-          startTime.current = Date.now();
         }
       } catch (err: any) {
         if (active) {
-          setError(err.message || 'Trục trặc tải Đấu trường PvP');
+          setError('Không thể tải bộ đề PvP. Vui lòng quay lại sau!');
           setLoading(false);
         }
       }

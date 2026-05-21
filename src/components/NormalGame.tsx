@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Question, HistoryRecord } from '../types';
 import { CheckCircle2, XCircle, Award, ArrowRight, Loader2, BookOpen, Clock, Zap } from 'lucide-react';
+import { fetchNormalQuestions } from '../utils/questionService';
 
 interface NormalGameProps {
   topic: 'cadao' | 'toanhoc' | 'lichsu' | 'khoahoc' | 'custom';
@@ -58,36 +59,27 @@ export function NormalGame({
         setLoading(true);
         setError('');
         
-        const response = await fetch('/api/generate-questions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            topic,
-            count: 10,
-            excludeIds,
-            difficulty: 'ngẫu nhiên',
-            studentClass
-          })
-        });
-        
-        if (!response.ok) {
-          throw new Error('Không thể tải câu hỏi từ máy chủ');
-        }
-        
-        const data = await response.json();
+        const qs = await fetchNormalQuestions(
+          topic as 'cadao' | 'toanhoc' | 'lichsu' | 'khoahoc',
+          10,
+          excludeIds,
+          studentClass
+        );
+
         if (active) {
-          if (data.questions && data.questions.length > 0) {
-            setQuestions(data.questions);
+          if (qs && qs.length > 0) {
+            setQuestions(qs);
+            setLoading(false);
+            startTime.current = Date.now();
           } else {
-            setError('Không thể lấy ngân hàng câu hỏi. Vui lòng thử lại!');
+            throw new Error('Không thể xây dựng danh sách câu hỏi phù hợp.');
           }
-          setLoading(false);
-          startTime.current = Date.now();
         }
       } catch (err: any) {
         if (active) {
           setError(err.message || 'Lỗi mạng kết nối máy chủ!');
           setLoading(false);
+          startTime.current = Date.now();
         }
       }
     }
@@ -103,7 +95,7 @@ export function NormalGame({
       active = false;
       clearInterval(timer);
     };
-  }, [topic, excludeIds, customQuestions]);
+  }, [topic, excludeIds, customQuestions, studentClass]);
 
   const getCurrentTopicName = () => {
     switch (topic) {

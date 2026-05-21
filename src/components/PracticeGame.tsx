@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Question } from '../types';
-import { LOCAL_QUESTIONS } from '../localQuestions';
+import { fetchNormalQuestions } from '../utils/questionService';
 import { CheckCircle2, XCircle, Award, BookOpen, ChevronRight, Loader2, PlayCircle, HelpCircle } from 'lucide-react';
 
 interface PracticeGameProps {
@@ -33,36 +33,17 @@ export function PracticeGame({ studentClass, onGainXP, onExit }: PracticeGamePro
     setIsCorrect(false);
 
     try {
-      const response = await fetch('/api/generate-questions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          topic: topicCode,
-          count: 1, // just fetch 1 fresh question
-          excludeIds: shownIds,
-          difficulty: streak > 6 ? 'kho' : streak > 3 ? 'trung-binh' : 'de',
-          studentClass
-        })
-      });
-
-      if (!response.ok) throw new Error();
-      const data = await response.json();
+      const qs = await fetchNormalQuestions(topicCode, 1, shownIds, studentClass);
       
-      if (data.questions && data.questions.length > 0) {
-        const q = data.questions[0];
+      if (qs && qs.length > 0) {
+        const q = qs[0];
         setCurrentQuestion(q);
         setShownIds(prev => [...prev, q.id]);
       } else {
-        throw new Error();
+        throw new Error('No question returned');
       }
     } catch (e) {
-      // Offline local pool fallback
-      const localPool = LOCAL_QUESTIONS.filter(q => q.topic === topicCode && !shownIds.includes(q.id));
-      const fallbackPool = localPool.length > 0 ? localPool : LOCAL_QUESTIONS.filter(q => q.topic === topicCode);
-      const randomQ = fallbackPool[Math.floor(Math.random() * fallbackPool.length)];
-      
-      setCurrentQuestion(randomQ);
-      setShownIds(prev => [...prev, randomQ.id]);
+      console.warn('Practice mode failed to load question:', e);
     } finally {
       setLoading(false);
     }
