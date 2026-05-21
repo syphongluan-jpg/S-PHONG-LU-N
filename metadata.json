@@ -1,0 +1,6 @@
+{
+  "name": "Trò chơi Học tập Tổng hợp",
+  "description": "Ứng dụng trò chơi học tập các chủ đề Ca dao Tục ngữ, Toán học, Lịch sử Việt Nam và Khoa học Tự nhiên dành cho học sinh THCS kèm chế độ PVP và luyện tập.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
