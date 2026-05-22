@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Question } from '../types';
 import { Loader2, BookOpen, Clock, Zap, ArrowRight, XCircle } from 'lucide-react';
 import { fetchNormalQuestions } from '../utils/questionService';
+import { soundManager } from '../utils/ambientMusic';
 
 interface NormalGameProps {
   topic: 'cadao' | 'toanhoc' | 'lichsu' | 'khoahoc' | 'custom';
@@ -107,22 +108,16 @@ export function NormalGame({
     }
   };
 
-  // Audio synthesizer for scientific-futuristic immersion
+  // Audio synthesizer for scientific-futuristic immersion using unified soundManager
   const playNormalBeep = (freq: number, duration: number = 0.1, type: 'sine' | 'triangle' | 'sawtooth' | 'square' = 'sine') => {
-    try {
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, ctx.currentTime);
-      gain.gain.setValueAtTime(0.04, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + duration);
-    } catch (e) {
-      // Audio autoplay restrictions bypass
+    if (freq === 880) {
+      soundManager.playCorrect();
+    } else if (freq === 260) {
+      soundManager.playIncorrect();
+    } else if (freq === 600 || freq === 500) {
+      soundManager.playClick();
+    } else {
+      soundManager.playTick(freq);
     }
   };
 
@@ -216,7 +211,7 @@ export function NormalGame({
             </span>
           </div>
           <h3 className="font-mono text-slate-100 font-extrabold text-sm tracking-tight mt-3">
-            PHÂN KHU KHẢO SÁT: <span className="text-cyan-400 uppercase">CÂU {currentIndex + 1} / {questions.length}</span>
+            TINH ANH TỨ MÔN: <span className="text-cyan-400 uppercase">CÂU {currentIndex + 1} / {questions.length}</span>
           </h3>
         </div>
 
@@ -368,7 +363,7 @@ export function NormalGame({
             onClick={handleNext}
             className="bg-gradient-to-r from-cyan-500 via-teal-500 to-indigo-500 hover:from-cyan-400 hover:to-teal-400 text-slate-950 font-mono font-black py-3 px-6 rounded-xl text-xs transition duration-150 flex items-center gap-1.5 uppercase tracking-widest shadow-[0_0_15px_rgba(6,182,212,0.3)] cursor-pointer"
           >
-            {currentIndex === questions.length - 1 ? 'KẾT THÚC KHẢO SÁT 💻' : 'KẾ TIẾP (NEXT_SEQ) ⚙️'}
+            {currentIndex === questions.length - 1 ? 'KẾT THÚC TINH ANH TỨ MÔN 💻' : 'KẾ TIẾP (NEXT_SEQ) ⚙️'}
             <ArrowRight className="w-4 h-4 text-slate-950 shrink-0" />
           </button>
         )}

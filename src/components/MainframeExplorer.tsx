@@ -16,6 +16,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { soundManager } from '../utils/ambientMusic';
 
 interface MainframeExplorerProps {
   profile: UserProfile;
@@ -35,22 +36,14 @@ export default function MainframeExplorer({ profile, onGainXP }: MainframeExplor
   const [selectedLetter, setSelectedLetter] = useState<string | null>(null);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'ok' | 'fail'; text: string } | null>(null);
 
-  // Audio synthesis for sci-fi atmosphere
+  // Audio synthesis for sci-fi atmosphere using unified soundManager
   const playSciFiBeep = (freq: number, duration: number = 0.08, type: 'sine' | 'triangle' | 'sawtooth' | 'square' = 'sine') => {
-    try {
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, ctx.currentTime);
-      gain.gain.setValueAtTime(0.04, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + duration);
-    } catch (e) {
-      // Ignored if sound is restricted
+    if (freq === 180) {
+      soundManager.playIncorrect();
+    } else if (freq === 520 || freq === 750) {
+      soundManager.playLevelUp();
+    } else {
+      soundManager.playClick();
     }
   };
 
@@ -464,7 +457,7 @@ export default function MainframeExplorer({ profile, onGainXP }: MainframeExplor
                           onClick={closePracticeModal}
                           className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono text-[11px] font-black uppercase px-6 py-2 rounded-xl transition cursor-pointer"
                         >
-                          TIẾP TỤC KHẢO SÁT
+                          TIẾP TỤC THÁM HIỂM
                         </button>
                       </div>
                     </motion.div>

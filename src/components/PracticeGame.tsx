@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Question } from '../types';
 import { fetchNormalQuestions } from '../utils/questionService';
 import { BookOpen, ChevronRight, Loader2, Cpu, Clock, HelpCircle, CheckCircle, AlertTriangle } from 'lucide-react';
+import { soundManager } from '../utils/ambientMusic';
 
 interface PracticeGameProps {
   studentClass: string;
@@ -24,22 +25,14 @@ export function PracticeGame({ studentClass, onGainXP, onExit }: PracticeGamePro
   const [sessionXP, setSessionXP] = useState(0);
   const [shownIds, setShownIds] = useState<string[]>([]);
 
-  // Synthesizer beep
+  // Synthesizer beep using unified soundManager
   const playPracticeBeep = (freq: number, duration: number = 0.1, type: 'sine' | 'triangle' | 'sawtooth' | 'square' = 'sine') => {
-    try {
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, ctx.currentTime);
-      gain.gain.setValueAtTime(0.04, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + duration);
-    } catch (e) {
-      // Autoplay bypass
+    if (freq === 880) {
+      soundManager.playCorrect();
+    } else if (freq === 220) {
+      soundManager.playIncorrect();
+    } else {
+      soundManager.playClick();
     }
   };
 

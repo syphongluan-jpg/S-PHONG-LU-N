@@ -17,6 +17,7 @@ import {
   Zap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { soundManager } from '../utils/ambientMusic';
 
 import { getTenThousandQuestion } from '../utils/tenThousandQuestions';
 
@@ -25,9 +26,11 @@ interface MemoryModeGameProps {
   onExit: () => void;
   onGainXP: (xp: number, finalScore: number) => void;
   useTicket: () => void;
+  completedIds: string[];
+  onSaveCompletedIds: (ids: string[]) => void;
 }
 
-export function MemoryModeGame({ profile, onExit, onGainXP, useTicket }: MemoryModeGameProps) {
+export function MemoryModeGame({ profile, onExit, onGainXP, useTicket, completedIds, onSaveCompletedIds }: MemoryModeGameProps) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [seenIds, setSeenIds] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -81,18 +84,7 @@ export function MemoryModeGame({ profile, onExit, onGainXP, useTicket }: MemoryM
   // Initialize questions based on player's registered Grade class
   const initializeMemoryQuestions = () => {
     const initialList: Question[] = [];
-    
-    let previouslyCompletedRawIds: string[] = [];
-    try {
-      const savedCompleted = localStorage.getItem('study_game_completed_ids');
-      if (savedCompleted) {
-        const parsed: string[] = JSON.parse(savedCompleted);
-        previouslyCompletedRawIds = parsed.map(id => getOriginalQuestionId(id));
-      }
-    } catch (e) {
-      console.error('Error loading study_game_completed_ids in MemoryModeGame:', e);
-    }
-
+    const previouslyCompletedRawIds = (completedIds || []).map(id => getOriginalQuestionId(id));
     const ids: string[] = [...previouslyCompletedRawIds];
     
     for (let i = 0; i < 5; i++) {
@@ -108,51 +100,14 @@ export function MemoryModeGame({ profile, onExit, onGainXP, useTicket }: MemoryM
   const playSound = (type: 'correct' | 'wrong' | 'tick' | 'victory') => {
     if (isMuted) return;
     try {
-      if (!synthRef.current) {
-        synthRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      }
-      const ctx = synthRef.current;
-      if (ctx.state === 'suspended') ctx.resume();
-
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
       if (type === 'correct') {
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
-        osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1); // E5
-        osc.frequency.setValueAtTime(880, ctx.currentTime + 0.2); // A5
-        gain.gain.setValueAtTime(0.12, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.5);
+        soundManager.playCorrect();
       } else if (type === 'wrong') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(140, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(70, ctx.currentTime + 0.3);
-        gain.gain.setValueAtTime(0.15, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.4);
+        soundManager.playIncorrect();
       } else if (type === 'tick') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(500, ctx.currentTime);
-        gain.gain.setValueAtTime(0.03, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.06);
+        soundManager.playTick(500);
       } else if (type === 'victory') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
-        osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.12); // E5
-        osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.24); // G5
-        osc.frequency.setValueAtTime(1046.50, ctx.currentTime + 0.36); // C6
-        gain.gain.setValueAtTime(0.15, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.8);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.8);
+        soundManager.playLevelUp();
       }
     } catch (e) {
       console.warn("Lỗi audio:", e);
@@ -221,16 +176,9 @@ export function MemoryModeGame({ profile, onExit, onGainXP, useTicket }: MemoryM
       // Save solved question ID to study_game_completed_ids so it won't repeat in other modes either!
       try {
         const rawId = getOriginalQuestionId(activeQ.id);
-        const savedCompleted = localStorage.getItem('study_game_completed_ids');
-        let parsed: string[] = [];
-        if (savedCompleted) {
-          parsed = JSON.parse(savedCompleted);
-        }
-        // Save using clean original IDs
-        const cleanedParsed = parsed.map(id => getOriginalQuestionId(id));
+        const cleanedParsed = (completedIds || []).map(id => getOriginalQuestionId(id));
         if (!cleanedParsed.includes(rawId)) {
-          parsed.push(rawId);
-          localStorage.setItem('study_game_completed_ids', JSON.stringify(parsed));
+          onSaveCompletedIds([...completedIds, rawId]);
         }
       } catch (e) {
         console.error('Error updating completed IDs in MemoryMode:', e);

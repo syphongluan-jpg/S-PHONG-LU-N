@@ -44,12 +44,12 @@ export function getRequiredXPForLevel(lvl: number): number {
  */
 export function getLevelAndProgress(xp: number): { level: number; progressPercent: number; xpInCurrentLevel: number; xpNeededInCurrentLevel: number } {
   let level = 1;
-  while (level < 1000 && xp >= cumulativeXpThresholds[level]) {
+  while (level < 1000 && xp >= cumulativeXpThresholds[level + 1]) {
     level++;
   }
 
-  const currentLevelStartXP = cumulativeXpThresholds[level - 1];
-  const nextLevelXPThreshold = cumulativeXpThresholds[level];
+  const currentLevelStartXP = cumulativeXpThresholds[level];
+  const nextLevelXPThreshold = cumulativeXpThresholds[level + 1];
   const reqXPThisLevel = nextLevelXPThreshold - currentLevelStartXP;
   const xpInCurrentLevel = xp - currentLevelStartXP;
 

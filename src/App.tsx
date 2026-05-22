@@ -36,9 +36,13 @@ import {
   Compass,
   Ticket,
   Cpu,
-  Trash2
+  Trash2,
+  Music,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { soundManager } from './utils/ambientMusic';
 
 const CLASS_LIST = [
   'Lớp 1', 'Lớp 2', 'Lớp 3', 'Lớp 4', 'Lớp 5', 'Lớp 6', 
@@ -207,6 +211,51 @@ export default function App() {
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [isLuckyWheelOpen, setIsLuckyWheelOpen] = useState(false);
   
+  // Audio state
+  const [musicPlaying, setMusicPlaying] = useState(soundManager.getIsMusicPlaying());
+  const [sfxEnabled, setSfxEnabled] = useState(soundManager.getIsSfxEnabled());
+  const [musicVol, setMusicVol] = useState(soundManager.getMusicVolume());
+  const [sfxVol, setSfxVol] = useState(soundManager.getSfxVolume());
+  const [showAudioMenu, setShowAudioMenu] = useState(false);
+
+  useEffect(() => {
+    const unlockAudio = () => {
+      soundManager.restartContext();
+    };
+    document.addEventListener('click', unlockAudio);
+    document.addEventListener('touchstart', unlockAudio);
+    return () => {
+      document.removeEventListener('click', unlockAudio);
+      document.removeEventListener('touchstart', unlockAudio);
+    };
+  }, []);
+
+  // Update sound settings in real-time
+  const toggleMusic = () => {
+    const next = !musicPlaying;
+    setMusicPlaying(next);
+    soundManager.setMusicPlaying(next);
+    soundManager.playClick();
+  };
+
+  const toggleSfx = () => {
+    const next = !sfxEnabled;
+    setSfxEnabled(next);
+    soundManager.setSfxEnabled(next);
+    soundManager.playClick();
+  };
+
+  const handleMusicVolChange = (v: number) => {
+    setMusicVol(v);
+    soundManager.setMusicVolume(v);
+  };
+
+  const handleSfxVolChange = (v: number) => {
+    setSfxVol(v);
+    soundManager.setSfxVolume(v);
+    soundManager.playTick(660); // Play sample tick when dragging
+  };
+  
   // Navigation
   const [activeView, setActiveView] = useState<'login' | 'dashboard' | 'normal-play' | 'practice' | 'pvp' | 'special' | 'memory-mode'>('login');
   const [selectedTopic, setSelectedTopic] = useState<'cadao' | 'toanhoc' | 'lichsu' | 'khoahoc' | 'custom' | null>(null);
@@ -229,29 +278,58 @@ export default function App() {
     memeText?: string;
   } | null>(null);
 
+  const loadUserSpecificData = (username: string) => {
+    const userKey = username.toLowerCase();
+    
+    // Load history
+    const userHistoryStr = localStorage.getItem(`study_game_history_${userKey}`);
+    let userHistory: HistoryRecord[] = [];
+    if (userHistoryStr) {
+      userHistory = JSON.parse(userHistoryStr);
+    } else {
+      // Fallback to legacy global history if any
+      const legacyHistoryStr = localStorage.getItem('study_game_history');
+      if (legacyHistoryStr) {
+        userHistory = JSON.parse(legacyHistoryStr);
+      }
+    }
+    setHistory(userHistory);
+    
+    // Load completed IDs
+    const userCompletedStr = localStorage.getItem(`study_game_completed_ids_${userKey}`);
+    let userCompleted: string[] = [];
+    if (userCompletedStr) {
+      userCompleted = JSON.parse(userCompletedStr);
+    } else {
+      // Fallback to legacy global completed
+      const legacyCompletedStr = localStorage.getItem('study_game_completed_ids');
+      if (legacyCompletedStr) {
+        userCompleted = JSON.parse(legacyCompletedStr);
+      }
+    }
+    setCompletedIds(userCompleted);
+
+    return { userHistory, userCompleted };
+  };
+
   // Load from local storage upon boot
   useEffect(() => {
     const savedProfile = localStorage.getItem('study_game_user_profile');
-    const savedHistory = localStorage.getItem('study_game_history');
     const savedCustom = localStorage.getItem('study_game_custom_questions');
-    const savedCompleted = localStorage.getItem('study_game_completed_ids');
     const savedAccs = localStorage.getItem('study_game_saved_accounts');
 
-    if (savedProfile) {
-      setProfile(JSON.parse(savedProfile));
-      setActiveView('dashboard');
-    }
-    if (savedHistory) {
-      setHistory(JSON.parse(savedHistory));
+    if (savedAccs) {
+      setSavedAccounts(JSON.parse(savedAccs));
     }
     if (savedCustom) {
       setCustomQuestions(JSON.parse(savedCustom));
     }
-    if (savedCompleted) {
-      setCompletedIds(JSON.parse(savedCompleted));
-    }
-    if (savedAccs) {
-      setSavedAccounts(JSON.parse(savedAccs));
+    
+    if (savedProfile) {
+      const parsedProfile = JSON.parse(savedProfile);
+      setProfile(parsedProfile);
+      loadUserSpecificData(parsedProfile.username);
+      setActiveView('dashboard');
     }
   }, []);
 
@@ -274,36 +352,45 @@ export default function App() {
   }, [profile]);
 
   // Sync to LS whenever states change
-  const saveProfileToLS = (nProfile: UserProfile | null, passedHistory?: HistoryRecord[]) => {
-    if (nProfile) {
-      const activeHistory = passedHistory || history;
-      const finalProfile = reEvaluateBadges(nProfile, activeHistory);
-      setProfile(finalProfile);
-      localStorage.setItem('study_game_user_profile', JSON.stringify(finalProfile));
-      // Also sync and upsert into savedAccounts!
-      setSavedAccounts(prev => {
-        const index = prev.findIndex(acc => acc.username.toLowerCase() === finalProfile.username.toLowerCase());
-        let updatedList = [...prev];
-        if (index >= 0) {
-          updatedList[index] = finalProfile;
-        } else {
-          updatedList.push(finalProfile);
-        }
-        localStorage.setItem('study_game_saved_accounts', JSON.stringify(updatedList));
-        return updatedList;
-      });
-    } else {
+  const updateProfileAndHistory = (nextProfile: UserProfile | null, nextHistory: HistoryRecord[] = history) => {
+    if (!nextProfile) {
       setProfile(null);
+      setHistory([]);
       localStorage.removeItem('study_game_user_profile');
+      return;
     }
+
+    const finalProfile = reEvaluateBadges(nextProfile, nextHistory);
+    setProfile(finalProfile);
+    setHistory(nextHistory);
+
+    const userKey = finalProfile.username.toLowerCase();
+    localStorage.setItem('study_game_user_profile', JSON.stringify(finalProfile));
+    localStorage.setItem(`study_game_history_${userKey}`, JSON.stringify(nextHistory));
+
+    setSavedAccounts(prev => {
+      const index = prev.findIndex(acc => acc.username.toLowerCase() === finalProfile.username.toLowerCase());
+      let updatedList = [...prev];
+      if (index >= 0) {
+        updatedList[index] = finalProfile;
+      } else {
+        updatedList.push(finalProfile);
+      }
+      localStorage.setItem('study_game_saved_accounts', JSON.stringify(updatedList));
+      return updatedList;
+    });
+  };
+
+  const saveProfileToLS = (nProfile: UserProfile | null, passedHistory?: HistoryRecord[]) => {
+    updateProfileAndHistory(nProfile, passedHistory || history);
   };
 
   const saveHistoryToLS = (nHistory: HistoryRecord[]) => {
-    setHistory(nHistory);
-    localStorage.setItem('study_game_history', JSON.stringify(nHistory));
     if (profile) {
-      // Delay slightly or call directly to evaluate with new history
-      saveProfileToLS(profile, nHistory);
+      updateProfileAndHistory(profile, nHistory);
+    } else {
+      setHistory(nHistory);
+      localStorage.setItem('study_game_history', JSON.stringify(nHistory));
     }
   };
 
@@ -314,7 +401,12 @@ export default function App() {
 
   const saveCompletedToLS = (nCompleted: string[]) => {
     setCompletedIds(nCompleted);
-    localStorage.setItem('study_game_completed_ids', JSON.stringify(nCompleted));
+    if (profile) {
+      const userKey = profile.username.toLowerCase();
+      localStorage.setItem(`study_game_completed_ids_${userKey}`, JSON.stringify(nCompleted));
+    } else {
+      localStorage.setItem('study_game_completed_ids', JSON.stringify(nCompleted));
+    }
   };
 
   // Login handler
@@ -337,10 +429,11 @@ export default function App() {
     // Check if account already exists to remember avoiding loss of data
     const existing = savedAccounts.find(acc => acc.username.toLowerCase() === trimmedName.toLowerCase());
     if (existing) {
+      const { userHistory } = loadUserSpecificData(existing.username);
       saveProfileToLS({
         ...existing,
         studentClass: inputClass // Update class if they selected a new class during login or preserve
-      });
+      }, userHistory);
       setActiveView('dashboard');
       setActiveTab('play');
       return;
@@ -359,7 +452,13 @@ export default function App() {
       lastSpinTimestamp: new Date().toISOString().split('T')[0]
     };
 
-    saveProfileToLS(newProfile);
+    setHistory([]);
+    setCompletedIds([]);
+    const userKey = trimmedName.toLowerCase();
+    localStorage.removeItem(`study_game_history_${userKey}`);
+    localStorage.removeItem(`study_game_completed_ids_${userKey}`);
+
+    saveProfileToLS(newProfile, []);
     setActiveView('dashboard');
     setActiveTab('play');
   };
@@ -370,6 +469,10 @@ export default function App() {
     
     const newXP = profile.xp + amount;
     const { level: targetLevel } = getLevelAndProgress(newXP);
+    
+    if (targetLevel > profile.level) {
+      soundManager.playLevelUp();
+    }
     
     // Badge checker
     let updatedBadges = [...profile.unlockedBadges];
@@ -393,6 +496,8 @@ export default function App() {
   // Sign out
   const handleSignOut = () => {
     saveProfileToLS(null);
+    setHistory([]);
+    setCompletedIds([]);
     setInputName('');
     setLoginError('');
     setActiveView('login');
@@ -426,10 +531,6 @@ export default function App() {
     };
 
     const nHistory = [...history, nRecord];
-    saveHistoryToLS(nHistory);
-
-    // Apply XP progress
-    addXP(gainedXP);
 
     // Check achievement badges based on the latest history
     let currentBadges = [...profile.unlockedBadges];
@@ -443,13 +544,26 @@ export default function App() {
     const nextXP = profile.xp + gainedXP;
     const { level: targetLevel } = getLevelAndProgress(nextXP);
     
+    if (targetLevel > profile.level) {
+      soundManager.playLevelUp();
+    }
+
+    // Accumulate milestone level badges if unlocked
+    if (targetLevel >= 5 && !currentBadges.includes('badge_level_5')) {
+      currentBadges.push('badge_level_5');
+    }
+    if (targetLevel >= 10 && !currentBadges.includes('badge_level_10')) {
+      currentBadges.push('badge_level_10');
+    }
+
     const updatedProfile: UserProfile = {
       ...profile,
       unlockedBadges: currentBadges,
       xp: nextXP,
       level: targetLevel
     };
-    saveProfileToLS(updatedProfile);
+    
+    updateProfileAndHistory(updatedProfile, nHistory);
 
     // Trigger Results modal display
     setResultsModal({
@@ -488,7 +602,6 @@ export default function App() {
     };
 
     const nHistory = [...history, nRecord];
-    saveHistoryToLS(nHistory);
 
     // Badges update
     let currentBadges = [...profile.unlockedBadges];
@@ -504,6 +617,18 @@ export default function App() {
     const nextXP = profile.xp + gainedXP;
     const { level: nextLvl } = getLevelAndProgress(nextXP);
 
+    if (nextLvl > profile.level) {
+      soundManager.playLevelUp();
+    }
+
+    // Accumulate milestone level badges if unlocked
+    if (nextLvl >= 5 && !currentBadges.includes('badge_level_5')) {
+      currentBadges.push('badge_level_5');
+    }
+    if (nextLvl >= 10 && !currentBadges.includes('badge_level_10')) {
+      currentBadges.push('badge_level_10');
+    }
+
     // Set high-tier title persistently on the profile if player unlocked it!
     const updatedProfile: UserProfile = {
       ...profile,
@@ -512,7 +637,8 @@ export default function App() {
       unlockedBadges: currentBadges,
       title: won ? titleEarned : profile.title,
     };
-    saveProfileToLS(updatedProfile);
+    
+    updateProfileAndHistory(updatedProfile, nHistory);
 
     setResultsModal({
       isOpen: true,
@@ -541,13 +667,25 @@ export default function App() {
     const { level: targetLevel } = getLevelAndProgress(nextXP);
     const tickets = Math.max(0, (profile.vipTickets || 0) - 1);
 
+    if (targetLevel > profile.level) {
+      soundManager.playLevelUp();
+    }
+
+    let currentBadges = [...profile.unlockedBadges];
+    if (targetLevel >= 5 && !currentBadges.includes('badge_level_5')) {
+      currentBadges.push('badge_level_5');
+    }
+    if (targetLevel >= 10 && !currentBadges.includes('badge_level_10')) {
+      currentBadges.push('badge_level_10');
+    }
+
     const updatedProfile: UserProfile = {
       ...profile,
       xp: nextXP,
       level: targetLevel,
-      vipTickets: tickets
+      vipTickets: tickets,
+      unlockedBadges: currentBadges
     };
-    saveProfileToLS(updatedProfile);
 
     const nRecord: HistoryRecord = {
       id: `record_mem_${Date.now()}`,
@@ -561,7 +699,7 @@ export default function App() {
     };
 
     const nHistory = [...history, nRecord];
-    saveHistoryToLS(nHistory);
+    updateProfileAndHistory(updatedProfile, nHistory);
 
     setResultsModal({
       isOpen: true,
@@ -657,6 +795,110 @@ export default function App() {
 
           {profile && (
             <div className="flex items-center gap-3">
+              {/* Sound Settings Control Dropdown */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAudioMenu(!showAudioMenu);
+                    soundManager.playClick();
+                  }}
+                  className={`p-1.5 sm:p-2 rounded-xl transition relative border cursor-pointer flex items-center justify-center ${
+                    showAudioMenu 
+                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' 
+                      : musicPlaying 
+                        ? 'bg-slate-950 border-slate-800 text-amber-400 hover:text-amber-300' 
+                        : 'bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300'
+                  }`}
+                  title="Cài đặt nhạc nền và âm thanh"
+                >
+                  {musicPlaying ? <Music className="w-4 h-4 sm:w-4.5 sm:h-4.5 animate-pulse" /> : <VolumeX className="w-4 h-4 sm:w-4.5 sm:h-4.5" />}
+                  {musicPlaying && (
+                    <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-500 rounded-full"></span>
+                  )}
+                </button>
+
+                <AnimatePresence>
+                  {showAudioMenu && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute right-0 mt-2.5 w-60 bg-slate-950/98 border border-slate-800 p-3.5 rounded-2xl shadow-2xl z-50 text-slate-250 font-sans"
+                    >
+                      <div className="flex items-center justify-between mb-2.5 border-b border-slate-850 pb-1.5">
+                        <span className="text-xs font-serif font-black italic text-amber-400">Âm học thần kinh</span>
+                        <button 
+                          onClick={() => { setShowAudioMenu(false); soundManager.playClick(); }} 
+                          className="text-[10px] text-slate-500 hover:text-slate-300 font-bold"
+                        >
+                          Đóng
+                        </button>
+                      </div>
+
+                      <div className="space-y-3.5">
+                        {/* Music Switch Slider */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <button
+                              type="button"
+                              onClick={toggleMusic}
+                              className="flex items-center gap-1.5 text-xs font-bold hover:text-amber-400 cursor-pointer"
+                            >
+                              <Music className={`w-3.5 h-3.5 ${musicPlaying ? 'text-amber-400' : 'text-slate-500'}`} />
+                              <span className="text-slate-300">Nhạc nền nhẹ nhàng</span>
+                            </button>
+                            <span className="text-[9px] text-slate-500 font-black uppercase font-mono">{musicPlaying ? 'Mở' : 'Tắt'}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] text-slate-500 font-mono min-w-8">{Math.round(musicVol * 100)}%</span>
+                            <input
+                              type="range"
+                              min="0"
+                              max="1"
+                              step="0.05"
+                              value={musicVol}
+                              onChange={(e) => handleMusicVolChange(parseFloat(e.target.value))}
+                              disabled={!musicPlaying}
+                              className="w-full accent-amber-500 h-1 bg-slate-900 rounded-lg appearance-none cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                            />
+                          </div>
+                        </div>
+
+                        {/* SFX Switch Slider */}
+                        <div className="space-y-1 border-t border-slate-900 pt-2.5">
+                          <div className="flex items-center justify-between">
+                            <button
+                              type="button"
+                              onClick={toggleSfx}
+                              className="flex items-center gap-1.5 text-xs font-bold hover:text-cyan-400 cursor-pointer"
+                            >
+                              {sfxEnabled ? <Volume2 className="w-3.5 h-3.5 text-cyan-400" /> : <VolumeX className="w-3.5 h-3.5 text-slate-500" />}
+                              <span className="text-slate-300">Hiệu ứng tương tác</span>
+                            </button>
+                            <span className="text-[9px] text-slate-500 font-black uppercase font-mono">{sfxEnabled ? 'Mở' : 'Tắt'}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] text-slate-500 font-mono min-w-8">{Math.round(sfxVol * 100)}%</span>
+                            <input
+                              type="range"
+                              min="0"
+                              max="1"
+                              step="0.05"
+                              value={sfxVol}
+                              onChange={(e) => handleSfxVolChange(parseFloat(e.target.value))}
+                              disabled={!sfxEnabled}
+                              className="w-full accent-cyan-400 h-1 bg-slate-900 rounded-lg appearance-none cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
               <div 
                 onClick={() => { if (activeView === 'dashboard') setIsAvatarModalOpen(true); }}
                 className={`w-8 h-8 rounded-lg bg-slate-950 flex items-center justify-center border border-slate-800 text-base font-bold shrink-0 overflow-hidden select-none ${activeView === 'dashboard' ? 'cursor-pointer hover:border-amber-500/80 hover:scale-105 transition-all' : ''}`}
@@ -671,7 +913,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleSignOut}
-                className="p-2 text-slate-500 hover:text-rose-450 hover:text-rose-400 hover:bg-rose-950/20 rounded-xl transition duration-150 cursor-pointer"
+                className="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-950/20 rounded-xl transition duration-150 cursor-pointer"
                 title="Đăng xuất khỏi lớp"
               >
                 <LogOut className="w-5 h-5" />
@@ -714,7 +956,8 @@ export default function App() {
                         <div
                           key={keyIdx}
                           onClick={() => {
-                            saveProfileToLS(acc);
+                            const { userHistory } = loadUserSpecificData(acc.username);
+                            saveProfileToLS(acc, userHistory);
                             setInputName(acc.username);
                             setInputClass(acc.studentClass);
                             setActiveView('dashboard');
@@ -738,7 +981,8 @@ export default function App() {
                           <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                             <span 
                               onClick={() => {
-                                saveProfileToLS(acc);
+                                const { userHistory } = loadUserSpecificData(acc.username);
+                                saveProfileToLS(acc, userHistory);
                                 setInputName(acc.username);
                                 setInputClass(acc.studentClass);
                                 setActiveView('dashboard');
@@ -926,7 +1170,6 @@ export default function App() {
                 { id: 'play', name: 'Đề thi & Luyện tập', icon: Play },
                 { id: 'wheel', name: 'Vòng Quay Nhân Phẩm 🎡', icon: RotateCw },
                 { id: 'leaderboard', name: 'Xếp hạng & Huy chương', icon: Trophy },
-                { id: 'custom', name: 'Sáng tạo câu đố', icon: PlusCircle },
                 { id: 'history', name: 'Lịch sử học tập', icon: History }
               ].map((tab) => {
                 const Icon = tab.icon;
@@ -1027,7 +1270,7 @@ export default function App() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                     <h3 className="text-lg font-serif italic font-extrabold text-slate-200 flex items-center gap-2">
                       <BookOpen className="w-5 h-5 text-amber-500" />
-                      Mô-đun Khảo sát (10 Câu ngẫu nhiên không trùng)
+                      Tinh Anh Tứ Môn
                     </h3>
                     <p className="text-xs text-slate-500">Tự động loại bớt các câu hỏi bạn đã làm đúng trong quá khứ.</p>
                   </div>
@@ -1158,7 +1401,7 @@ export default function App() {
                       </span>
                       <span className="text-xs text-slate-400 font-semibold">• 50 câu hỏi khó</span>
                     </div>
-                    <h3 className="font-serif italic font-extrabold text-lg sm:text-xl">Trận đấu Tri Thức PvP ⚔️</h3>
+                    <h3 className="font-serif italic font-extrabold text-lg sm:text-xl">Đấu Trường Kiến Thức ⚔️</h3>
                     <p className="text-xs text-purple-200/90 max-w-xl leading-normal">
                       Khớp đấu với các học sinh xuất chúng giả lập AI toàn trường. Thử thách 50 câu hỏi tăng dần độ khó vô tận lên tới 700 điểm tối đa. Trở thành <strong className="text-yellow-300 font-serif italic">Học Đế 👑</strong> nếu hoàn thành dưới 5 phút! Thua cuộc sẽ nhận meme bất ngờ thú vị!
                     </p>
@@ -1346,8 +1589,7 @@ export default function App() {
                 const updatedHistory = [...history, nRecord];
                 
                 // First save history records
-                setHistory(updatedHistory);
-                localStorage.setItem('study_game_history', JSON.stringify(updatedHistory));
+                saveHistoryToLS(updatedHistory);
 
                 // Then update profile with both the updated VIP tickets and updated history
                 saveProfileToLS({
@@ -1355,6 +1597,8 @@ export default function App() {
                   vipTickets: tickets
                 }, updatedHistory);
               }}
+              completedIds={completedIds}
+              onSaveCompletedIds={saveCompletedToLS}
             />
           </motion.div>
         )}

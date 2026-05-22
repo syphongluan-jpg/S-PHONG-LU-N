@@ -18,6 +18,7 @@ import {
   History
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { soundManager } from '../utils/ambientMusic';
 
 interface SpecialGameProps {
   profile: UserProfile;
@@ -217,62 +218,14 @@ export function SpecialGame({ onExit, onGainXP }: SpecialGameProps) {
   const playSound = (type: 'correct' | 'wrong' | 'gameover' | 'tick' | 'highscore') => {
     if (isMuted) return;
     try {
-      if (!synthRef.current) {
-        synthRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      }
-      const ctx = synthRef.current;
-      if (ctx.state === 'suspended') {
-        ctx.resume();
-      }
-
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
       if (type === 'correct') {
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
-        osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.08); // E5
-        osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.16); // G5
-        gain.gain.setValueAtTime(0.04, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.5);
+        soundManager.playCorrect();
       } else if (type === 'wrong') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(150, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.35);
-        gain.gain.setValueAtTime(0.04, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.4);
+        soundManager.playIncorrect();
       } else if (type === 'tick') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(600, ctx.currentTime);
-        gain.gain.setValueAtTime(0.02, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.06);
-      } else if (type === 'highscore') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-        osc.frequency.setValueAtTime(698.46, ctx.currentTime + 0.1); // F5
-        osc.frequency.setValueAtTime(880, ctx.currentTime + 0.2); // A5
-        osc.frequency.setValueAtTime(1174.66, ctx.currentTime + 0.3); // D6
-        gain.gain.setValueAtTime(0.04, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.6);
-      } else if (type === 'gameover') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(220, ctx.currentTime);
-        osc.frequency.setValueAtTime(196, ctx.currentTime + 0.15);
-        osc.frequency.setValueAtTime(146.83, ctx.currentTime + 0.3);
-        gain.gain.setValueAtTime(0.04, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.7);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.7);
+        soundManager.playTick(600);
+      } else if (type === 'highscore' || type === 'gameover') {
+        soundManager.playLevelUp();
       }
     } catch (e) {
       console.warn("Lỗi tạo âm thanh tinh giản:", e);

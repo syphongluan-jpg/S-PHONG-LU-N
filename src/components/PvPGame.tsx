@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Question, UserProfile } from '../types';
 import { Loader2, ShieldAlert, Clock, ArrowRight, BookOpen, Trophy, Zap, AlertTriangle, CheckCircle } from 'lucide-react';
 import { fetchPvPQuestions } from '../utils/questionService';
+import { soundManager } from '../utils/ambientMusic';
 
 interface PvPGameProps {
   userProfile: UserProfile;
@@ -20,9 +21,9 @@ const MEMES = [
 ];
 
 const OPONENTS = [
-  { name: 'Nguyễn Văn Đạt (Thần đồng)', class: 'Lớp 9', speed: 5.5, accuracy: 0.84 },
-  { name: 'Lê Kiều Trinh (Thủ khoa)', class: 'Lớp 12', speed: 4.8, accuracy: 0.90 },
-  { name: 'Khánh Linh (Học Bá)', class: 'Lớp 8', speed: 6.2, accuracy: 0.78 }
+  { name: 'Nguyễn Văn Đạt (Thần đồng)', class: 'Lớp 9', speed: 13.5, accuracy: 0.84 },
+  { name: 'Lê Kiều Trinh (Thủ khoa)', class: 'Lớp 12', speed: 11.5, accuracy: 0.90 },
+  { name: 'Khánh Linh (Học Bá)', class: 'Lớp 8', speed: 15.0, accuracy: 0.78 }
 ];
 
 export function PvPGame({ userProfile, onGameComplete, onExit }: PvPGameProps) {
@@ -48,22 +49,16 @@ export function PvPGame({ userProfile, onGameComplete, onExit }: PvPGameProps) {
   const [timerSeconds, setTimerSeconds] = useState(0);
   const startTime = useRef<number>(Date.now());
 
-  // Synthesizer beep
+  // Synthesizer beep using unified soundManager
   const playPvPBeep = (freq: number, duration: number = 0.1, type: 'sine' | 'triangle' | 'sawtooth' | 'square' = 'sine') => {
-    try {
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, ctx.currentTime);
-      gain.gain.setValueAtTime(0.04, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + duration);
-    } catch (e) {
-      // Audio autoplay bypass
+    if (freq === 980) {
+      soundManager.playCorrect();
+    } else if (freq === 180) {
+      soundManager.playIncorrect();
+    } else if (freq === 320) {
+      soundManager.playTick(freq * 1.5); // opponent correct ticking chime
+    } else {
+      soundManager.playClick();
     }
   };
 
@@ -149,8 +144,8 @@ export function PvPGame({ userProfile, onGameComplete, onExit }: PvPGameProps) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center space-y-4 font-mono">
         <Loader2 className="w-14 h-14 text-purple-400 animate-spin" />
-        <h3 className="text-xl font-black text-slate-100 uppercase tracking-tight">KẾT NỐI KHÔNG GIAN PvP ĐA CHIỀU</h3>
-        <p className="text-xs text-purple-400 max-w-sm font-bold uppercase tracking-widest animate-pulse">ĐANG PHÂN BỔ 50 ĐỀ THI TRÍ TUỆ TÙNG PHÂN VÙNG DỮ LIỆU...</p>
+        <h3 className="text-xl font-black text-slate-100 uppercase tracking-tight">KẾT NỐI ĐẤU TRƯỜNG KIẾN THỨC ĐA CHIỀU</h3>
+        <p className="text-xs text-purple-400 max-w-sm font-bold uppercase tracking-widest animate-pulse">ĐANG PHÂN BỔ 50 ĐỀ THI KIẾN THỨC TỪNG PHÂN VÙNG DỮ LIỆU...</p>
       </div>
     );
   }
@@ -160,7 +155,7 @@ export function PvPGame({ userProfile, onGameComplete, onExit }: PvPGameProps) {
       <div className="p-8 text-center space-y-4 max-w-md mx-auto bg-slate-950 border-2 border-red-500/30 rounded-3xl shadow-xl font-mono">
         <ShieldAlert className="w-16 h-16 text-rose-500 mx-auto" />
         <h3 className="text-xl font-black text-slate-100 uppercase tracking-tight">LỖI THIẾT LẬP KẾT KHOA</h3>
-        <p className="text-xs text-slate-405 text-slate-400">{error || 'Thất bại khi tổ chức Đấu trường PvP.'}</p>
+        <p className="text-xs text-slate-405 text-slate-400">{error || 'Thất bại khi tổ chức Đấu trường Kiến Thức.'}</p>
         <button
           onClick={onExit}
           className="bg-slate-900 border border-slate-800 hover:bg-slate-805 text-cyan-405 text-cyan-400 py-2.5 px-5 rounded-xl text-xs font-black tracking-widest uppercase cursor-pointer transition duration-150"
@@ -248,7 +243,7 @@ export function PvPGame({ userProfile, onGameComplete, onExit }: PvPGameProps) {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <Trophy className="w-5 h-5 text-yellow-450 text-yellow-400 fill-yellow-400 animate-bounce" />
-            <h3 className="font-mono font-black text-sm uppercase tracking-wider">ĐẤU TRƯỜNG HUYỀN THoẠI PvP - TRÍ TUỆ ĐỈNH CAO</h3>
+            <h3 className="font-mono font-black text-sm uppercase tracking-wider">ĐẤU TRƯỜNG KIẾN THỨC - TRÍ TUỆ ĐỈNH CAO</h3>
           </div>
           <p className="text-xs text-purple-308 text-purple-300 font-semibold">Tăng cấp giới hạn. Thang điểm đỉnh cao: <strong className="text-amber-400">700 điểm</strong></p>
         </div>

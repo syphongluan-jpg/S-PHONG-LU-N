@@ -1,6 +1,6 @@
 import { Question } from '../types';
 import { LOCAL_QUESTIONS } from '../localQuestions';
-import { getTenThousandQuestion } from './tenThousandQuestions';
+import { getTenThousandQuestion, ensureUniqueOptions } from './tenThousandQuestions';
 
 export function getOriginalQuestionId(id: string): string {
   if (!id) return '';
@@ -11,6 +11,48 @@ export function getOriginalQuestionId(id: string): string {
     }
   }
   return id;
+}
+
+// O(1) metadata generator matching the seed formulas of tenThousandQuestions
+function getIndexMetadataAndSeed(idx: number): { topic: 'cadao' | 'toanhoc' | 'lichsu' | 'khoahoc'; difficulty: 'de' | 'trung-binh' | 'kho' | 'thach-thuc' } {
+  let seed = Math.max(1, Math.min(10000, idx));
+  const x = Math.sin(seed++) * 10000;
+  const r1 = x - Math.floor(x);
+
+  const topics: Array<'toanhoc' | 'khoahoc' | 'lichsu' | 'cadao'> = ['toanhoc', 'khoahoc', 'lichsu', 'cadao'];
+  const topic = topics[Math.floor(r1 * topics.length)];
+
+  // Determine star rating mapped from index % 5
+  const stars = (idx % 5) + 1;
+  let difficulty: 'de' | 'trung-binh' | 'kho' | 'thach-thuc' = 'trung-binh';
+  if (stars === 1 || stars === 2) difficulty = 'de';
+  else if (stars === 3) difficulty = 'trung-binh';
+  else if (stars === 4) difficulty = 'kho';
+  else difficulty = 'thach-thuc';
+
+  return { topic, difficulty };
+}
+
+// Faster static caches maps populated on module load
+const BANK_CACHE_BY_TOPIC: Record<string, number[]> = {
+  cadao: [],
+  toanhoc: [],
+  lichsu: [],
+  khoahoc: []
+};
+
+const BANK_CACHE_BY_TOPIC_AND_DIFF: Record<string, number[]> = {};
+
+// Fill matching index pools instantly
+for (let i = 1; i <= 10000; i++) {
+  const meta = getIndexMetadataAndSeed(i);
+  BANK_CACHE_BY_TOPIC[meta.topic].push(i);
+
+  const key = `${meta.topic}_${meta.difficulty}`;
+  if (!BANK_CACHE_BY_TOPIC_AND_DIFF[key]) {
+    BANK_CACHE_BY_TOPIC_AND_DIFF[key] = [];
+  }
+  BANK_CACHE_BY_TOPIC_AND_DIFF[key].push(i);
 }
 
 // Utility helper to safely check if a value is in an array
@@ -54,6 +96,8 @@ export function generateProceduralMathQuestion(index: number, studentClass: stri
   const factor = index + 1;
   const c = studentClass || '';
   
+  let q: Question;
+
   if (['Lớp 1', 'Lớp 2', 'Lớp 3', 'Lớp 4', 'Lớp 5'].includes(c)) {
     // Primary School maths: Simple add/sub/mul
     const op = Math.random() > 0.5 ? '+' : '*';
@@ -61,7 +105,7 @@ export function generateProceduralMathQuestion(index: number, studentClass: stri
       const num1 = Math.floor(Math.random() * 50) + 10;
       const num2 = Math.floor(Math.random() * 40) + 5;
       const ans = num1 + num2;
-      return {
+      q = {
         id: `procedural_math_primary_${index}_${Date.now()}`,
         topic: 'toanhoc',
         type: 'multiple-choice',
@@ -75,7 +119,7 @@ export function generateProceduralMathQuestion(index: number, studentClass: stri
       const num1 = Math.floor(Math.random() * 9) + 2;
       const num2 = Math.floor(Math.random() * 9) + 2;
       const ans = num1 * num2;
-      return {
+      q = {
         id: `procedural_math_primary_mul_${index}_${Date.now()}`,
         topic: 'toanhoc',
         type: 'multiple-choice',
@@ -90,7 +134,7 @@ export function generateProceduralMathQuestion(index: number, studentClass: stri
     // High school maths: Equations, trigonometry, log
     const num = Math.floor(Math.random() * 10) + 2;
     const ans = num * num;
-    return {
+    q = {
       id: `procedural_math_thpt_${index}_${Date.now()}`,
       topic: 'toanhoc',
       type: 'multiple-choice',
@@ -105,7 +149,7 @@ export function generateProceduralMathQuestion(index: number, studentClass: stri
     const a = Math.floor(Math.random() * 5) + 1;
     const b = Math.floor(Math.random() * 5) + 1;
     const det = a * 4 - b * 3;
-    return {
+    q = {
       id: `procedural_math_uni_${index}_${Date.now()}`,
       topic: 'toanhoc',
       type: 'multiple-choice',
@@ -118,7 +162,7 @@ export function generateProceduralMathQuestion(index: number, studentClass: stri
   } else {
     // Standard Junior High (THCS) maths: Algebra
     const val = Math.floor(Math.random() * 15) + 3;
-    return {
+    q = {
       id: `procedural_math_thcs_${index}_${Date.now()}`,
       topic: 'toanhoc',
       type: 'multiple-choice',
@@ -129,6 +173,13 @@ export function generateProceduralMathQuestion(index: number, studentClass: stri
       difficulty: 'trung-binh'
     };
   }
+
+  const uniqueRes = ensureUniqueOptions(q.options, q.correctAnswer);
+  return {
+    ...q,
+    options: uniqueRes.options,
+    correctAnswer: uniqueRes.correctAnswer
+  };
 }
 
 // Generate a set of Normal questions adapted to student level completely client-side (no server required)
@@ -154,15 +205,19 @@ export function generateNormalQuestionsClient(
     excludeSet.add(q.id);
   }
 
-  // Draw remaining questions randomly from deterministic 10,000 index-based system bank
-  let attempts = 0;
-  while (finalizedList.length < count && attempts < 1000) {
-    attempts++;
-    const randIdx = Math.floor(Math.random() * 10000) + 1;
-    const qCandidate = getTenThousandQuestion(randIdx, studentClass);
-    if (qCandidate.topic === topic && !excludeSet.has(qCandidate.id)) {
-      finalizedList.push(qCandidate);
-      excludeSet.add(qCandidate.id);
+  // Draw remaining questions randomly from the partitioned index pools for 100% O(1) matching efficiency
+  const pool = BANK_CACHE_BY_TOPIC[topic] || [];
+  if (pool.length > 0) {
+    let indexCursor = Math.floor(Math.random() * pool.length);
+    let attempts = 0;
+    while (finalizedList.length < count && attempts < pool.length) {
+      attempts++;
+      const randIdx = pool[(indexCursor + attempts) % pool.length];
+      const qCandidate = getTenThousandQuestion(randIdx, studentClass);
+      if (!excludeSet.has(qCandidate.id)) {
+        finalizedList.push(qCandidate);
+        excludeSet.add(qCandidate.id);
+      }
     }
   }
 
@@ -209,16 +264,21 @@ export function generatePvPQuestionsClient(studentClass: string = 'Lớp 6'): Qu
     const targetDiff: 'de' | 'trung-binh' | 'kho' | 'thach-thuc' = 
       i < 15 ? 'de' : i < 30 ? 'trung-binh' : i < 42 ? 'kho' : 'thach-thuc';
     
-    // Draw from 10k system bank for unparalleled diversity and freshness
+    const compoundKey = `${topic}_${targetDiff}`;
+    const pool = BANK_CACHE_BY_TOPIC_AND_DIFF[compoundKey] || [];
     let qFound: Question | null = null;
-    let attempts = 0;
-    while (!qFound && attempts < 150) {
-      attempts++;
-      const randIdx = Math.floor(Math.random() * 10000) + 1;
-      const qCandidate = getTenThousandQuestion(randIdx, studentClass);
-      if (qCandidate.topic === topic && qCandidate.difficulty === targetDiff && !excludeSet.has(qCandidate.id)) {
-        qFound = qCandidate;
-        excludeSet.add(qCandidate.id);
+
+    if (pool.length > 0) {
+      let indexCursor = Math.floor(Math.random() * pool.length);
+      let attempts = 0;
+      while (!qFound && attempts < pool.length) {
+        attempts++;
+        const randIdx = pool[(indexCursor + attempts) % pool.length];
+        const qCandidate = getTenThousandQuestion(randIdx, studentClass);
+        if (!excludeSet.has(qCandidate.id)) {
+          qFound = qCandidate;
+          excludeSet.add(qCandidate.id);
+        }
       }
     }
 
