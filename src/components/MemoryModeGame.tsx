@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Question, UserProfile, HistoryRecord } from '../types';
 import { LOCAL_QUESTIONS } from '../localQuestions';
-import { generateProceduralMathQuestion, getGradeLevelTier } from '../utils/questionService';
+import { generateProceduralMathQuestion, getGradeLevelTier, getOriginalQuestionId } from '../utils/questionService';
 import { 
   X, 
   HelpCircle, 
@@ -64,8 +64,12 @@ export function MemoryModeGame({ profile, onExit, onGainXP, useTicket }: MemoryM
       tries++;
     }
     
-    // Bulletproof fallback
-    const randLocal = LOCAL_QUESTIONS[Math.floor(Math.random() * LOCAL_QUESTIONS.length)];
+    // Bulletproof fallback - try to find local questions that are not in excludeList first
+    const uncompletedLocal = LOCAL_QUESTIONS.filter(lq => !excludeList.includes(getOriginalQuestionId(lq.id)));
+    const randLocal = uncompletedLocal.length > 0
+      ? uncompletedLocal[Math.floor(Math.random() * uncompletedLocal.length)]
+      : LOCAL_QUESTIONS[Math.floor(Math.random() * LOCAL_QUESTIONS.length)];
+      
     const fallbackStars = randLocal.difficulty === 'de' ? 2 : randLocal.difficulty === 'trung-binh' ? 3 : randLocal.difficulty === 'kho' ? 4 : 5;
     return {
       ...randLocal,
@@ -77,7 +81,19 @@ export function MemoryModeGame({ profile, onExit, onGainXP, useTicket }: MemoryM
   // Initialize questions based on player's registered Grade class
   const initializeMemoryQuestions = () => {
     const initialList: Question[] = [];
-    const ids: string[] = [];
+    
+    let previouslyCompletedRawIds: string[] = [];
+    try {
+      const savedCompleted = localStorage.getItem('study_game_completed_ids');
+      if (savedCompleted) {
+        const parsed: string[] = JSON.parse(savedCompleted);
+        previouslyCompletedRawIds = parsed.map(id => getOriginalQuestionId(id));
+      }
+    } catch (e) {
+      console.error('Error loading study_game_completed_ids in MemoryModeGame:', e);
+    }
+
+    const ids: string[] = [...previouslyCompletedRawIds];
     
     for (let i = 0; i < 5; i++) {
       const q = generateSingleMemoryQuestion(ids);
@@ -201,6 +217,24 @@ export function MemoryModeGame({ profile, onExit, onGainXP, useTicket }: MemoryM
     if (isCorrect) {
       playSound('correct');
       setScore(prev => prev + 1);
+      
+      // Save solved question ID to study_game_completed_ids so it won't repeat in other modes either!
+      try {
+        const rawId = getOriginalQuestionId(activeQ.id);
+        const savedCompleted = localStorage.getItem('study_game_completed_ids');
+        let parsed: string[] = [];
+        if (savedCompleted) {
+          parsed = JSON.parse(savedCompleted);
+        }
+        // Save using clean original IDs
+        const cleanedParsed = parsed.map(id => getOriginalQuestionId(id));
+        if (!cleanedParsed.includes(rawId)) {
+          parsed.push(rawId);
+          localStorage.setItem('study_game_completed_ids', JSON.stringify(parsed));
+        }
+      } catch (e) {
+        console.error('Error updating completed IDs in MemoryMode:', e);
+      }
       
       // Calculate XP with 5x multiplier!
       const qStars = activeQ.stars || 3;

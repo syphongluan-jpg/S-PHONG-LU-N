@@ -2,6 +2,17 @@ import { Question } from '../types';
 import { LOCAL_QUESTIONS } from '../localQuestions';
 import { getTenThousandQuestion } from './tenThousandQuestions';
 
+export function getOriginalQuestionId(id: string): string {
+  if (!id) return '';
+  if (id.startsWith('client_')) {
+    const parts = id.split('_');
+    if (parts.length >= 5) {
+      return parts.slice(3, -1).join('_');
+    }
+  }
+  return id;
+}
+
 // Utility helper to safely check if a value is in an array
 function safeIncludes(arr: any, value: any): boolean {
   if (!arr || !Array.isArray(arr)) return false;
@@ -128,7 +139,8 @@ export function generateNormalQuestionsClient(
   studentClass: string = 'Lớp 6'
 ): Question[] {
   const levelInfo = getGradeLevelTier(studentClass);
-  const excludeSet = new Set<string>(excludeIds || []);
+  const cleanExcludeIds = (excludeIds || []).map(id => getOriginalQuestionId(id));
+  const excludeSet = new Set<string>(cleanExcludeIds);
   const finalizedList: Question[] = [];
 
   // Filter pool by topic from handcrafted local questions

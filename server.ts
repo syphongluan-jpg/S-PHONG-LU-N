@@ -88,11 +88,22 @@ app.post('/api/generate-questions', async (req, res) => {
   const validTopics = ['cadao', 'toanhoc', 'lichsu', 'khoahoc'];
   const topicCode = validTopics.includes(topic) ? topic : 'cadao';
 
+  // Extract original raw IDs from client-mangled or PvP-mangled IDs
+  const rawExcludeIds = (excludeIds || []).map((id: string) => {
+    if (typeof id === 'string' && id.startsWith('client_')) {
+      const parts = id.split('_');
+      if (parts.length >= 5) {
+        return parts.slice(3, -1).join('_');
+      }
+    }
+    return id;
+  });
+
   const client = getGeminiClient();
   if (!client) {
     // Offline mode: Filter and shuffle local questions
     console.log('Gemini API key is not configured or invalid. Using local question library.');
-    const filtered = LOCAL_QUESTIONS.filter(q => q.topic === topicCode && !excludeIds.includes(q.id));
+    const filtered = LOCAL_QUESTIONS.filter(q => q.topic === topicCode && !rawExcludeIds.includes(q.id));
     const pool = filtered.length > 0 ? filtered : LOCAL_QUESTIONS.filter(q => q.topic === topicCode);
     const shuffled = [...pool].sort(() => 0.5 - Math.random());
     const result = shuffled.slice(0, Math.min(count, shuffled.length));
@@ -115,7 +126,7 @@ Yêu cầu sư phạm khắt khe:
 - Trình độ đối tượng: Thí sinh đang học ở trình độ '${studentClass}'. ${levelInfo.generalPrompt}
 - Độ khó mong muốn: ${difficulty}. Nếu độ khó là "de" thì câu hỏi phải rất nền tảng cơ bản ở đối tượng này, nếu "thach-thuc" thì đòi hỏi suy luận cao độ.
 - Tỉ lệ dạng câu hỏi: Khoảng 80% câu trắc nghiệm lựa chọn (type là 'multiple-choice' với 4 lựa chọn có đáp án nhiễu gài bẫy khéo léo nhưng logic trong 'options'), và 20% câu hỏi trả lời ngắn (type là 'short-answer', người chơi điền đáp án ngắn gọn ví dụ từ ngữ danh từ hoặc con số, options hãy để mảng rỗng []).
-- Tránh trùng lặp với các câu hỏi có mã sau: [${excludeIds.join(', ')}].
+- Tránh trùng lặp với các câu hỏi có mã sau: [${rawExcludeIds.join(', ')}].
 - Đáp án chính xác tuyệt đối, lời giải thích tại trường 'explanation' sâu sắc học thuật bằng tiếng Việt thân thiện, súc tích giúp thí sinh tăng cường tri thức hữu lý.
 - Trường 'id' của câu hỏi phải là duy nhất dạng chuỗi ngẫu nhiên kết thúc bằng mã cấp lớp (ví dụ 'gemini_${topicCode}_${studentClass.replace(/\s+/g, '')}_x').
 - Hãy trả về kết quả dưới dạng mảng JSON thô ghép khớp chuẩn chỉnh cấu trúc Schema.`;
@@ -166,7 +177,7 @@ Yêu cầu sư phạm khắt khe:
   } catch (error: any) {
     console.error('Error generating questions with Gemini:', error);
     // Fallback to local
-    const filtered = LOCAL_QUESTIONS.filter(q => q.topic === topicCode && !excludeIds.includes(q.id));
+    const filtered = LOCAL_QUESTIONS.filter(q => q.topic === topicCode && !rawExcludeIds.includes(q.id));
     const pool = filtered.length > 0 ? filtered : LOCAL_QUESTIONS.filter(q => q.topic === topicCode);
     const shuffled = [...pool].sort(() => 0.5 - Math.random());
     const result = shuffled.slice(0, Math.min(count, shuffled.length));
