@@ -32,6 +32,7 @@ import {
   User,
   Image as ImageIcon,
   RotateCcw,
+  RotateCw,
   Compass,
   Ticket,
   Cpu,
@@ -923,7 +924,7 @@ export default function App() {
             <div className="flex border-b border-slate-800/80 overflow-x-auto gap-2 py-1 scrollbar-none">
               {[
                 { id: 'play', name: 'Đề thi & Luyện tập', icon: Play },
-                { id: 'mainframe', name: 'Mã Nguồn 1 Vạn Câu 🪐', icon: Cpu },
+                { id: 'wheel', name: 'Vòng Quay Nhân Phẩm 🎡', icon: RotateCw },
                 { id: 'leaderboard', name: 'Xếp hạng & Huy chương', icon: Trophy },
                 { id: 'custom', name: 'Sáng tạo câu đố', icon: PlusCircle },
                 { id: 'history', name: 'Lịch sử học tập', icon: History }
@@ -978,7 +979,7 @@ export default function App() {
                     
                     <button
                       type="button"
-                      onClick={() => setIsLuckyWheelOpen(true)}
+                      onClick={() => setActiveTab('wheel')}
                       className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold py-3 px-5 rounded-2xl text-xs transition duration-150 transform hover:scale-[1.03] active:scale-[0.98] shrink-0 font-serif italic cursor-pointer shadow-md shadow-emerald-950/30"
                     >
                       🎪 Quay Ngay
@@ -1208,6 +1209,15 @@ export default function App() {
               </div>
             )}
 
+            {activeTab === 'wheel' && profile && (
+              <div className="animate-fade-in bg-slate-900/60 p-6 sm:p-8 rounded-3xl border border-slate-800 shadow-xl space-y-6">
+                <LuckyWheel
+                  profile={profile}
+                  onUpdateProfile={(updatedProfile) => saveProfileToLS(updatedProfile)}
+                />
+              </div>
+            )}
+
             {activeTab === 'mainframe' && profile && (
               <div className="animate-fade-in">
                 <MainframeExplorer profile={profile} onGainXP={(xpVal) => addXP(xpVal)} />
@@ -1323,12 +1333,6 @@ export default function App() {
               useTicket={() => {
                 if (!profile) return;
                 const tickets = Math.max(0, (profile.vipTickets || 0) - 1);
-                saveProfileToLS({
-                  ...profile,
-                  vipTickets: tickets
-                });
-
-                // Also save history that tells they entered memory mode!
                 const nRecord: HistoryRecord = {
                   id: `record_mem_${Date.now()}`,
                   timestamp: new Date().toISOString(),
@@ -1339,7 +1343,17 @@ export default function App() {
                   durationSeconds: 150,
                   titleEarned: 'Ký Ức Học Sinh'
                 };
-                saveHistoryToLS([...history, nRecord]);
+                const updatedHistory = [...history, nRecord];
+                
+                // First save history records
+                setHistory(updatedHistory);
+                localStorage.setItem('study_game_history', JSON.stringify(updatedHistory));
+
+                // Then update profile with both the updated VIP tickets and updated history
+                saveProfileToLS({
+                  ...profile,
+                  vipTickets: tickets
+                }, updatedHistory);
               }}
             />
           </motion.div>
@@ -1602,15 +1616,6 @@ export default function App() {
             </button>
           </div>
         </div>
-      )}
-
-      {/* LUCKY WHEEL MODAL */}
-      {isLuckyWheelOpen && profile && (
-        <LuckyWheel
-          profile={profile}
-          onUpdateProfile={(updatedProfile) => saveProfileToLS(updatedProfile)}
-          onClose={() => setIsLuckyWheelOpen(false)}
-        />
       )}
 
       {/* 4. Footer credit panel */}

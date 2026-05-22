@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
+import { getTenThousandQuestion } from '../utils/tenThousandQuestions';
+
 interface MemoryModeGameProps {
   profile: UserProfile;
   onExit: () => void;
@@ -27,6 +29,7 @@ interface MemoryModeGameProps {
 
 export function MemoryModeGame({ profile, onExit, onGainXP, useTicket }: MemoryModeGameProps) {
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [seenIds, setSeenIds] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [accumulatedXP, setAccumulatedXP] = useState(0);
@@ -40,79 +43,50 @@ export function MemoryModeGame({ profile, onExit, onGainXP, useTicket }: MemoryM
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const synthRef = useRef<AudioContext | null>(null);
 
-  // Initialize questions based on player's registered Grade class
-  // 1 Star: 100 XP, 2 Star: 300 XP, 3 Star: 500 XP, 4 Star: 1200 XP, 5 Star: 2200 XP
-  // Total XP is multiplied by 5 in "Miền Ký Ức"
-  const initializeMemoryQuestions = () => {
-    const c = profile.studentClass || 'Lớp 6';
-    let availableStarsList: number[] = [2, 3, 4]; // default
+  const generateSingleMemoryQuestion = (excludeList: string[]): Question => {
+    const studentClass = profile.studentClass || 'Lớp 6';
     
-    if (['Lớp 1', 'Lớp 2', 'Lớp 3'].includes(c)) {
-      availableStarsList = [1, 2];
-    } else if (['Lớp 4', 'Lớp 5', 'Lớp 6'].includes(c)) {
-      availableStarsList = [2, 3];
-    } else if (['Lớp 7', 'Lớp 8', 'Lớp 9'].includes(c)) {
-      availableStarsList = [3, 4];
-    } else {
-      availableStarsList = [3, 4, 5];
-    }
-
-    // Select 5 questions at random spanning available stars
-    const pool = [...LOCAL_QUESTIONS];
-    
-    // Shuffle the pool
-    const shuffledPool = pool.sort(() => 0.5 - Math.random());
-    
-    const selected: Question[] = [];
-    
-    // Assign stars to raw templates & pick 5 matching the star list
-    for (const q of shuffledPool) {
-      if (selected.length >= 5) break;
-      
-      // Determine a star rating based on original difficulty
-      let stars = 3;
-      if (q.difficulty === 'de') stars = Math.random() > 0.5 ? 1 : 2;
-      else if (q.difficulty === 'trung-binh') stars = 3;
-      else if (q.difficulty === 'kho') stars = 4;
-      else if (q.difficulty === 'thach-thuc') stars = 5;
-
-      // Filter based on star constraint
-      if (availableStarsList.includes(stars)) {
-        selected.push({
-          ...q,
-          stars
-        });
-      }
-    }
-
-    // Enforce math procedural matching if needed
-    const finalized = selected.map((q, idx) => {
-      if (q.topic === 'toanhoc' && Math.random() > 0.3) {
-        const mathQ = generateProceduralMathQuestion(idx, c);
-        // Map star dynamically
-        let star = 3;
-        if (mathQ.difficulty === 'de') star = 2;
-        else if (mathQ.difficulty === 'trung-binh') star = 3;
-        else if (mathQ.difficulty === 'kho') star = 4;
-        else if (mathQ.difficulty === 'thach-thuc') star = 5;
+    // Attempt drawing a random unique card from our 10,000 index bank
+    let tries = 0;
+    while (tries < 150) {
+      const randIdx = Math.floor(Math.random() * 10000) + 1;
+      const q = getTenThousandQuestion(randIdx, studentClass);
+      if (!excludeList.includes(q.id)) {
+        // Map original difficulty to star rating
+        let stars = 3;
+        if (q.difficulty === 'de') stars = Math.random() > 0.5 ? 1 : 2;
+        else if (q.difficulty === 'trung-binh') stars = 3;
+        else if (q.difficulty === 'kho') stars = 4;
+        else if (q.difficulty === 'thach-thuc') stars = 5;
         
-        return {
-          ...mathQ,
-          stars: star,
-          id: `memory_math_${idx}_${Date.now()}`
-        };
+        return { ...q, stars };
       }
-      return q;
-    });
-
-    // Make sure we have exactly 5 questions
-    if (finalized.length < 5) {
-      // absolute fallback list
-      const fallbackQuestions = pool.slice(0, 5).map((q, idx) => ({ ...q, stars: 3 }));
-      setQuestions(fallbackQuestions);
-    } else {
-      setQuestions(finalized);
+      tries++;
     }
+    
+    // Bulletproof fallback
+    const randLocal = LOCAL_QUESTIONS[Math.floor(Math.random() * LOCAL_QUESTIONS.length)];
+    const fallbackStars = randLocal.difficulty === 'de' ? 2 : randLocal.difficulty === 'trung-binh' ? 3 : randLocal.difficulty === 'kho' ? 4 : 5;
+    return {
+      ...randLocal,
+      stars: fallbackStars,
+      id: `${randLocal.id}_fallback_mem_${Date.now()}`
+    };
+  };
+
+  // Initialize questions based on player's registered Grade class
+  const initializeMemoryQuestions = () => {
+    const initialList: Question[] = [];
+    const ids: string[] = [];
+    
+    for (let i = 0; i < 5; i++) {
+      const q = generateSingleMemoryQuestion(ids);
+      initialList.push(q);
+      ids.push(q.id);
+    }
+    
+    setQuestions(initialList);
+    setSeenIds(ids);
   };
 
   const playSound = (type: 'correct' | 'wrong' | 'tick' | 'victory') => {
@@ -240,19 +214,18 @@ export function MemoryModeGame({ profile, onExit, onGainXP, useTicket }: MemoryM
   };
 
   const handleNext = () => {
-    if (currentIndex + 1 < questions.length) {
-      setCurrentIndex(prev => prev + 1);
-      setTimeLeft(45);
-      setIsAnswered(false);
-      setSelectedLetter(null);
-    } else {
-      // Game flow wraps up
-      setGameOver(true);
-      playSound('victory');
-      if (accumulatedXP > 0) {
-        onGainXP(accumulatedXP, score);
-      }
+    const nextIndex = currentIndex + 1;
+    // Infinitely append a newly compiled unique question from the database as the user advances
+    if (nextIndex >= questions.length) {
+      const q = generateSingleMemoryQuestion([...seenIds, ...questions.map(item => item.id)]);
+      setQuestions(prev => [...prev, q]);
+      setSeenIds(prev => [...prev, q.id]);
     }
+    
+    setCurrentIndex(nextIndex);
+    setTimeLeft(45);
+    setIsAnswered(false);
+    setSelectedLetter(null);
   };
 
   const activeQuestion = questions[currentIndex];
@@ -273,6 +246,22 @@ export function MemoryModeGame({ profile, onExit, onGainXP, useTicket }: MemoryM
         </div>
 
         <div className="flex items-center gap-2">
+          {gameStarted && !gameOver && (
+            <button
+              type="button"
+              onClick={() => {
+                setGameOver(true);
+                playSound('victory');
+                if (accumulatedXP > 0) {
+                  onGainXP(accumulatedXP, score);
+                }
+              }}
+              className="px-3 py-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-550 border border-amber-500/20 text-slate-950 font-black rounded-lg text-[11px] transition cursor-pointer shadow-md"
+            >
+              💰 Dừng & Nhận EXP
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => setIsMuted(prev => !prev)}
@@ -302,7 +291,7 @@ export function MemoryModeGame({ profile, onExit, onGainXP, useTicket }: MemoryM
               Chào mừng tới Miền Ký Ức
             </h3>
             <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
-              Khu vực học cấp cao bí truyền. Mỗi câu trả lời đúng được <strong className="text-purple-400">gấp 5 lần EXP</strong>! Thử thách gồm 5 câu đố tùy biến theo cấp độ lớp học, mỗi câu có <strong className="text-cyan-400">45 giây</strong> phản tốc.
+              Khu vực học tập bậc cao độc nhất vô nhị. Mỗi câu trả lời đúng được <strong className="text-purple-400">gấp 5 lần EXP</strong>! Thử thách gồm <strong className="text-amber-400">vô hạn câu hỏi không giới hạn số lượng</strong>, được rút trực tiếp từ kho lưu trữ 10,000 câu của hệ thống. Đồng hồ đạt <strong className="text-cyan-400">45 giây</strong> phản tốc cho mỗi lượt chơi.
             </p>
           </div>
 
@@ -330,7 +319,7 @@ export function MemoryModeGame({ profile, onExit, onGainXP, useTicket }: MemoryM
               🎟️ Sử dụng 1 Vé VIP vào cổng
             </button>
             <p className="text-[9px] text-slate-500">
-              {(profile.vipTickets || 0) < 1 ? 'Quay bánh xe may mắn miễn phí ngoài sảnh để nhận thêm vé VIP!' : 'Nhấn nút phía trên để bắt đầu thử thách!'}
+              {(profile.vipTickets || 0) < 1 ? 'Kiếm thêm vé VIP tại mục Vòng Quay Nhân Phẩm ở thanh Menu!' : 'Nhấn nút phía trên để bắt đầu thử thách!'}
             </p>
           </div>
         </div>
@@ -340,7 +329,7 @@ export function MemoryModeGame({ profile, onExit, onGainXP, useTicket }: MemoryM
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-slate-900/30 border border-slate-850 rounded-2xl p-3 flex flex-col items-center justify-center">
               <span className="text-[9px] uppercase font-serif text-slate-500 font-bold tracking-wider mb-0.5">Tiến độ</span>
-              <span className="text-base font-mono font-bold text-slate-200">{currentIndex + 1} / 5</span>
+              <span className="text-sm font-mono font-bold text-slate-200">Câu {currentIndex + 1}</span>
             </div>
 
             <div className="bg-slate-900/30 border border-slate-850 rounded-2xl p-3 flex flex-col items-center justify-center">
@@ -447,11 +436,25 @@ export function MemoryModeGame({ profile, onExit, onGainXP, useTicket }: MemoryM
                       <p className="text-xs text-slate-400 leading-relaxed">{activeQuestion.explanation}</p>
                     </div>
 
-                    <div className="flex justify-end">
+                    <div className="flex justify-between items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setGameOver(true);
+                          playSound('victory');
+                          if (accumulatedXP > 0) {
+                            onGainXP(accumulatedXP, score);
+                          }
+                        }}
+                        className="bg-slate-950 hover:bg-slate-900 border border-slate-800 text-amber-400 font-bold py-2.5 px-4 rounded-xl text-xs transition cursor-pointer"
+                      >
+                        💰 Dừng & Nhận {accumulatedXP} XP
+                      </button>
+
                       <button
                         type="button"
                         onClick={handleNext}
-                        className="bg-purple-500 hover:bg-purple-400 text-slate-950 font-serif italic font-extrabold py-2 px-5 rounded-lg text-xs flex items-center gap-1.5 transition"
+                        className="bg-purple-500 hover:bg-purple-400 text-slate-950 font-serif italic font-extrabold py-2.5 px-5 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
                       >
                         Tiếp tục
                         <ArrowRight className="w-3.5 h-3.5" />
@@ -470,13 +473,13 @@ export function MemoryModeGame({ profile, onExit, onGainXP, useTicket }: MemoryM
           <div className="space-y-1">
             <span className="text-4xl">👑</span>
             <h3 className="text-lg font-serif font-black text-slate-100 italic">Vượt Ải Thành Công!</h3>
-            <p className="text-xs text-slate-400">Bạn đã hoàn tất cuộc thám hiểm trong Miền Kí Ức.</p>
+            <p className="text-xs text-slate-400">Bạn đã hoàn tất cuộc thám hiểm trong Miền Ký Ức.</p>
           </div>
 
           <div className="grid grid-cols-2 gap-4 max-w-xs mx-auto">
             <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-850">
               <p className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold font-serif mb-0.5">Số câu trả lời đúng</p>
-              <p className="text-lg font-mono font-black text-emerald-400">{score} / 5</p>
+              <p className="text-lg font-mono font-black text-emerald-400">{score} câu</p>
             </div>
             
             <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-850">
@@ -493,7 +496,7 @@ export function MemoryModeGame({ profile, onExit, onGainXP, useTicket }: MemoryM
               className={`flex-1 font-serif italic font-extrabold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 transition ${
                 (profile.vipTickets || 0) >= 1
                   ? 'bg-gradient-to-r from-purple-500 to-cyan-500 hover:from-purple-400 hover:to-cyan-400 text-slate-950 cursor-pointer'
-                  : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                  : 'bg-slate-800 text-slate-550 border border-slate-700/50 cursor-not-allowed text-slate-500'
               }`}
             >
               🎟️ Tiếp tục chơi ván mới (1 VIP)
@@ -502,7 +505,7 @@ export function MemoryModeGame({ profile, onExit, onGainXP, useTicket }: MemoryM
             <button
               type="button"
               onClick={onExit}
-              className="flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-slate-350 py-2.5 rounded-xl text-xs font-bold transition"
+              className="flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-slate-350 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer"
             >
               Trở lại sảnh chính
             </button>

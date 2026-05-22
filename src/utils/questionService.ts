@@ -1,5 +1,6 @@
 import { Question } from '../types';
 import { LOCAL_QUESTIONS } from '../localQuestions';
+import { getTenThousandQuestion } from './tenThousandQuestions';
 
 // Utility helper to safely check if a value is in an array
 function safeIncludes(arr: any, value: any): boolean {
@@ -126,44 +127,56 @@ export function generateNormalQuestionsClient(
   excludeIds: string[] = [],
   studentClass: string = 'Lớp 6'
 ): Question[] {
-  const topicCode = topic;
   const levelInfo = getGradeLevelTier(studentClass);
-  const exclude = Array.isArray(excludeIds) ? excludeIds : [];
+  const excludeSet = new Set<string>(excludeIds || []);
+  const finalizedList: Question[] = [];
 
-  // Filter pool by topic
-  let filtered = LOCAL_QUESTIONS.filter(q => q.topic === topicCode && !safeIncludes(exclude, q.id));
+  // Filter pool by topic from handcrafted local questions
+  const localMatching = LOCAL_QUESTIONS.filter(q => q.topic === topic && !excludeSet.has(q.id));
+  const localShuffled = [...localMatching].sort(() => 0.5 - Math.random());
   
-  // If no questions left in filtered pool, fallback to entire topic
-  let pool = filtered.length > 0 ? filtered : LOCAL_QUESTIONS.filter(q => q.topic === topicCode);
-  
-  // Try to sort pool by matching ideal difficulty for grade level
-  const idealDiff = levelInfo.difficulty;
-  const sortedPool = [...pool].sort((a, b) => {
-    if (a.difficulty === idealDiff && b.difficulty !== idealDiff) return -1;
-    if (a.difficulty !== idealDiff && b.difficulty === idealDiff) return 1;
-    return 0;
-  });
+  // Fill up to 4 questions from high-quality local handcrafted questions to ensure premium starter experience
+  for (const q of localShuffled) {
+    if (finalizedList.length >= Math.min(count, 4)) break;
+    finalizedList.push(q);
+    excludeSet.add(q.id);
+  }
 
-  // Shuffle and slice
-  const shuffled = sortedPool.sort(() => 0.5 - Math.random());
-  let selection = shuffled.slice(0, Math.min(count, shuffled.length));
+  // Draw remaining questions randomly from deterministic 10,000 index-based system bank
+  let attempts = 0;
+  while (finalizedList.length < count && attempts < 1000) {
+    attempts++;
+    const randIdx = Math.floor(Math.random() * 10000) + 1;
+    const qCandidate = getTenThousandQuestion(randIdx, studentClass);
+    if (qCandidate.topic === topic && !excludeSet.has(qCandidate.id)) {
+      finalizedList.push(qCandidate);
+      excludeSet.add(qCandidate.id);
+    }
+  }
 
-  // If we selected maths topic, inject some procedurally generated grade-appropriate maths to make it truly unlimited
-  if (topicCode === 'toanhoc') {
-    selection = selection.map((q, idx) => {
-      if (Math.random() > 0.4) {
-        return generateProceduralMathQuestion(idx, studentClass);
+  // Fallback if we couldn't get enough: pull from local questions again to satisfy required count
+  if (finalizedList.length < count) {
+    const extraLocal = LOCAL_QUESTIONS.filter(q => q.topic === topic);
+    for (const q of extraLocal) {
+      if (finalizedList.length >= count) break;
+      if (!finalizedList.some(comp => comp.id === q.id)) {
+        finalizedList.push(q);
       }
-      return q;
-    });
+    }
   }
 
   // Prepend localized visual badge according to class rank so user is aware the game matches their grade
-  return selection.map((q, idx) => ({
-    ...q,
-    id: q.id.startsWith('procedural_') ? q.id : `client_${topicCode}_${studentClass.replace(/\s+/g, '')}_${q.id}_${idx}`,
-    questionText: `${levelInfo.prefix} ${q.questionText}`
-  }));
+  return finalizedList.map((q, idx) => {
+    let text = q.questionText;
+    if (!text.includes(levelInfo.prefix)) {
+      text = `${levelInfo.prefix} ${text}`;
+    }
+    return {
+      ...q,
+      id: q.id.startsWith('procedural_') ? q.id : `client_${topic}_${studentClass.replace(/\s+/g, '')}_${q.id}_${idx}`,
+      questionText: text
+    };
+  });
 }
 
 // Generate 50 PvP questions completely client-side spanning all topics and ramping up difficulty
@@ -171,6 +184,7 @@ export function generatePvPQuestionsClient(studentClass: string = 'Lớp 6'): Qu
   const pvpPool: Question[] = [];
   const topics: Array<'cadao' | 'toanhoc' | 'lichsu' | 'khoahoc'> = ['cadao', 'toanhoc', 'lichsu', 'khoahoc'];
   const levelInfo = getGradeLevelTier(studentClass);
+  const excludeSet = new Set<string>();
 
   for (let i = 0; i < 50; i++) {
     const topic = topics[i % topics.length];
@@ -183,30 +197,35 @@ export function generatePvPQuestionsClient(studentClass: string = 'Lớp 6'): Qu
     const targetDiff: 'de' | 'trung-binh' | 'kho' | 'thach-thuc' = 
       i < 15 ? 'de' : i < 30 ? 'trung-binh' : i < 42 ? 'kho' : 'thach-thuc';
     
-    if (topic === 'toanhoc') {
-      // Create spectacular procedural math scaled to level and index difficulty
-      const mathQ = generateProceduralMathQuestion(i, studentClass);
-      pvpPool.push({
-        ...mathQ,
-        id: `procedural_pvp_${i}_${Date.now()}`,
-        questionText: `⚔️ [Chinh phục PvP ${levelInfo.tier} - Câu ${i + 1}] ${mathQ.questionText.replace(/\[.*?\]\s*/g, '')}`,
-        difficulty: targetDiff
-      });
-    } else {
-      // Pull and modify template
+    // Draw from 10k system bank for unparalleled diversity and freshness
+    let qFound: Question | null = null;
+    let attempts = 0;
+    while (!qFound && attempts < 150) {
+      attempts++;
+      const randIdx = Math.floor(Math.random() * 10000) + 1;
+      const qCandidate = getTenThousandQuestion(randIdx, studentClass);
+      if (qCandidate.topic === topic && qCandidate.difficulty === targetDiff && !excludeSet.has(qCandidate.id)) {
+        qFound = qCandidate;
+        excludeSet.add(qCandidate.id);
+      }
+    }
+
+    // Fallback if difficulty-specific card not found in 10k bank
+    if (!qFound) {
       const candidates = LOCAL_QUESTIONS.filter(q => q.topic === topic && q.difficulty === targetDiff);
       const fallback = LOCAL_QUESTIONS.filter(q => q.topic === topic);
       const chosenTemplate = candidates[Math.floor(Math.random() * candidates.length)] || 
                              fallback[Math.floor(Math.random() * fallback.length)] || 
                              LOCAL_QUESTIONS[0];
-
-      pvpPool.push({
-        ...chosenTemplate,
-        id: `client_pvp_${i}_${chosenTemplate.id}_${Date.now()}`,
-        questionText: `⚔️ [Chinh phục PvP ${levelInfo.tier} - Câu ${i + 1}] ${chosenTemplate.questionText}`,
-        difficulty: targetDiff
-      });
+      qFound = { ...chosenTemplate };
     }
+
+    pvpPool.push({
+      ...qFound,
+      id: `client_pvp_${i}_${qFound.id}_${Date.now()}`,
+      questionText: `⚔️ [Chinh phục PvP ${levelInfo.tier} - Câu ${i + 1}] ${qFound.questionText}`,
+      difficulty: targetDiff
+    });
   }
 
   return pvpPool;
